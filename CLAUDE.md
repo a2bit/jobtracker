@@ -105,7 +105,23 @@ GET    /readyz       # Readiness (DB check)
 
 ## Database
 
-PostgreSQL via CloudNativePG on homelab K3s. Tables:
+PostgreSQL 17 via CloudNativePG on homelab K3s.
+
+### Direct Access
+
+```bash
+# Query via kubectl exec (no psql needed locally)
+kubectl --context homelab exec jobtracker-pg-1 -n jobtracker -c postgres \
+  -- psql -U postgres -d jobtracker -c "SELECT ..."
+
+# Interactive session (requires -it, won't work in Claude Code)
+kubectl --context homelab exec -it jobtracker-pg-1 -n jobtracker -c postgres \
+  -- psql -U postgres -d jobtracker
+```
+
+Use `-U postgres` (superuser). Peer auth rejects `-U jobtracker` via unix socket.
+
+### Tables
 
 - `companies` - employer info, ATS platform
 - `jobs` - listings with source tracking and dedup (source + source_id unique)
@@ -115,24 +131,69 @@ PostgreSQL via CloudNativePG on homelab K3s. Tables:
 - `collector_runs` - job queue + audit log (pending/running/succeeded/failed, SKIP LOCKED)
 - `api_tokens` - SHA-256 hashed bearer tokens with expiry
 
+### Collector Enable/Disable
+
+Collectors default to `enabled = false` on first migration. The worker exits immediately
+if its collector is disabled. Enable via SQL:
+
+```bash
+kubectl --context homelab exec jobtracker-pg-1 -n jobtracker -c postgres \
+  -- psql -U postgres -d jobtracker -c "UPDATE collectors SET enabled = true WHERE name = 'hiringcafe';"
+```
+
 ## Deployment
 
 ```
-GitHub push -> CI (cargo test, docker build) -> Tailscale -> registry-push -> ArgoCD -> K3s
+GitHub push -> CI (cargo test, docker build) -> registry-push.tail74b58.ts.net
+  -> ArgoCD Image Updater polls registry (2min) -> git write-back newTag
+  -> ArgoCD auto-sync -> K3s
 ```
 
-Manifests in `deploy/` follow the n8n-cnpg pattern:
+### Deploy Manifests (`deploy/`)
 
-- CNPG cluster with B2 backup via Barman Cloud
-- ExternalSecrets from 1Password (HomeLab vault)
-- Tailscale ingress at jobtracker.tail74b58.ts.net
+| File | Purpose |
+|------|---------|
+| `external-secret-app.yaml` | Constructs `DATABASE_URL` URI from 1Password password |
+| `external-secret-pg.yaml` | Provides username/password for CNPG bootstrap |
+| `external-secret-b2.yaml` | Backblaze B2 credentials for backup |
+| `objectstore-b2.yaml` | Barman Cloud object store config |
+| `cnpg-cluster.yaml` | PostgreSQL cluster (1 instance, 5Gi) |
+| `deployment.yaml` | Web server (`serve` subcommand) |
+| `deployment-worker.yaml` | HiringCafe worker (`collect` subcommand) |
+| `service.yaml` | ClusterIP on port 80 -> 8080 |
+| `ingress.yaml` | Tailscale ingress at `jobtracker.tail74b58.ts.net` |
+| `kustomization.yaml` | Kustomize base with image tag management |
+
+### CNPG Secret Pattern
+
+CNPG does NOT auto-create a `-app` secret with connection URI. Two ExternalSecrets are needed:
+
+1. `jobtracker-pg-credentials`: provides `username` + `password` for CNPG bootstrap
+2. `jobtracker-pg-app`: constructs full `uri` for `DATABASE_URL` env var
+
+The URI template: `postgresql://jobtracker:{{ .password }}@jobtracker-pg-rw.jobtracker.svc:5432/jobtracker`
+
+### ArgoCD Image Updater
+
+Image tag automation is configured in homelab-gitops repo:
+
+- `argocd-image-updater.yaml`: Helm chart v1.1.0 with homelab registry config
+- `imageupdater-jobtracker.yaml`: CRD polling `registry-push.tail74b58.ts.net/jobtracker`
+  with `newest-build` strategy and `allowTags: regexp:^[0-9a-f]{7}$` (git short SHAs)
+- Write-back: commits `newTag` changes to `deploy/kustomization.yaml` via git
+
+### Image Tag
+
+Managed in `deploy/kustomization.yaml` under `images[].newTag`. Updated automatically
+by ArgoCD Image Updater or manually for debugging. CI pushes tags matching 7-char git
+short SHA (e.g., `a85837d`).
 
 ## Implementation Phases
 
 - **Phase 1** (done): Cargo scaffold, migrations, REST API, auth middleware
 - **Phase 2** (done): Askama templates, htmx dashboard, Tailwind dark mode UI
 - **Phase 3** (done): HiringCafe collector, DB queue (SKIP LOCKED), worker subcommand, admin run history
-- **Phase 4**: CI/CD pipeline, ArgoCD deployment, 1Password setup
+- **Phase 4** (done): CI/CD pipeline, ArgoCD deployment, Image Updater, 1Password secrets, Slack notifications
 - **Phase 5**: Integration with linkedin-job-applier agent, CV pipeline, metrics
 
 ## Configuration

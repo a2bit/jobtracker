@@ -49,17 +49,27 @@ jobs:
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
           args: --accept-dns=true
-      - name: Wait for MagicDNS
+      - name: Resolve registry via MagicDNS
         run: |
-          for i in $(seq 1 10); do
-            if nslookup "$REGISTRY" >/dev/null 2>&1; then
-              echo "DNS resolved $REGISTRY on attempt $i"
+          # systemd-resolved doesn't forward .ts.net to Tailscale.
+          # Query MagicDNS (100.100.100.100) directly and inject into /etc/hosts.
+          REGISTRY_IP=""
+          for i in $(seq 1 15); do
+            REGISTRY_IP=$(dig +short "$REGISTRY" @100.100.100.100 2>/dev/null | head -1)
+            if [ -n "$REGISTRY_IP" ]; then
+              echo "Resolved $REGISTRY -> $REGISTRY_IP on attempt $i"
               break
             fi
             echo "Waiting for MagicDNS... attempt $i"
             sleep 2
           done
-          tailscale status
+          if [ -z "$REGISTRY_IP" ]; then
+            echo "::error::Failed to resolve $REGISTRY via MagicDNS"
+            tailscale status
+            exit 1
+          fi
+          echo "$REGISTRY_IP $REGISTRY" | sudo tee -a /etc/hosts
+          echo "Added /etc/hosts entry: $REGISTRY_IP $REGISTRY"
       - name: Tag and push to internal registry
         env:
           GIT_SHA: ${{ github.sha }}

@@ -124,7 +124,7 @@ Manifests in `deploy/` follow the n8n-cnpg pattern:
 ## Implementation Phases
 
 - **Phase 1** (done): Cargo scaffold, migrations, REST API, auth middleware
-- **Phase 2** (current): Askama templates, htmx dashboard, Tailwind dark mode UI
+- **Phase 2** (done): Askama templates, htmx dashboard, Tailwind dark mode UI
 - **Phase 3**: Job collectors (LinkedIn, Indeed, HiringCafe, Xing)
 - **Phase 4**: CI/CD pipeline, ArgoCD deployment, 1Password setup
 - **Phase 5**: Integration with linkedin-job-applier agent, CV pipeline, metrics

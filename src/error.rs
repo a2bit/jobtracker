@@ -28,11 +28,11 @@ impl IntoResponse for AppError {
                 if let sqlx::Error::Database(db_err) = e
                     && db_err.is_unique_violation()
                 {
-                        return (
-                            StatusCode::CONFLICT,
-                            axum::Json(json!({ "error": "Resource already exists" })),
-                        )
-                            .into_response();
+                    return (
+                        StatusCode::CONFLICT,
+                        axum::Json(json!({ "error": "Resource already exists" })),
+                    )
+                        .into_response();
                 }
                 tracing::error!("Database error: {e}");
                 (

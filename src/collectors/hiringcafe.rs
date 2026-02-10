@@ -149,8 +149,13 @@ impl HiringCafe {
 fn build_state(config: &Value, query: &str) -> Value {
     let mut state = default_state();
 
-    if !query.is_empty() && let Some(obj) = state.as_object_mut() {
-        obj.insert("jobTitleQuery".to_string(), Value::String(query.to_string()));
+    if !query.is_empty()
+        && let Some(obj) = state.as_object_mut()
+    {
+        obj.insert(
+            "jobTitleQuery".to_string(),
+            Value::String(query.to_string()),
+        );
     }
 
     // Apply config overrides for fields the API supports
@@ -223,30 +228,15 @@ fn default_state() -> Value {
     m.insert("calcFrequency".into(), s("Yearly"));
 
     // Experience ranges
-    m.insert(
-        "roleYoeRange".into(),
-        Value::Array(vec![n(0), n(20)]),
-    );
+    m.insert("roleYoeRange".into(), Value::Array(vec![n(0), n(20)]));
     m.insert("excludeIfRoleYoeIsNotSpecified".into(), b(false));
-    m.insert(
-        "managementYoeRange".into(),
-        Value::Array(vec![n(0), n(20)]),
-    );
+    m.insert("managementYoeRange".into(), Value::Array(vec![n(0), n(20)]));
     m.insert("excludeIfManagementYoeIsNotSpecified".into(), b(false));
 
     // Degree fields (e.g. associatesDegreeFieldsOfStudy, excludedAssociatesDegreeFieldsOfStudy)
-    for prefix in [
-        "associates",
-        "bachelors",
-        "masters",
-        "doctorate",
-    ] {
+    for prefix in ["associates", "bachelors", "masters", "doctorate"] {
         m.insert(format!("{prefix}DegreeFieldsOfStudy"), empty_arr());
-        let cap = format!(
-            "{}{}",
-            &prefix[..1].to_uppercase(),
-            &prefix[1..]
-        );
+        let cap = format!("{}{}", &prefix[..1].to_uppercase(), &prefix[1..]);
         m.insert(format!("excluded{cap}DegreeFieldsOfStudy"), empty_arr());
     }
 
@@ -293,8 +283,7 @@ fn default_state() -> Value {
 /// JSON.stringify -> encodeURIComponent -> btoa
 fn encode_state(state: &Value) -> String {
     let json_str = serde_json::to_string(state).unwrap_or_default();
-    let uri_encoded: String =
-        utf8_percent_encode(&json_str, ENCODE_URI_COMPONENT_SET).to_string();
+    let uri_encoded: String = utf8_percent_encode(&json_str, ENCODE_URI_COMPONENT_SET).to_string();
     BASE64.encode(uri_encoded.as_bytes())
 }
 

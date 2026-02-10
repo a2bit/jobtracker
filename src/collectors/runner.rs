@@ -45,10 +45,7 @@ async fn process_run(pool: &PgPool, collector: &dyn super::JobCollector, run: &C
     match collector.collect(&config).await {
         Ok(jobs) => {
             let (found, new) = upsert_jobs(pool, jobs).await;
-            tracing::info!(
-                "Run {} completed: {found} found, {new} new",
-                run.id
-            );
+            tracing::info!("Run {} completed: {found} found, {new} new", run.id);
             let _ = CollectorRun::mark_succeeded(pool, run.id, found, new).await;
             let _ = Collector::record_run(pool, &run.collector_name, None).await;
         }
@@ -69,7 +66,10 @@ async fn upsert_jobs(pool: &PgPool, jobs: Vec<CollectedJob>) -> (i32, i32) {
         let company = match Company::find_or_create(pool, &collected.company_name).await {
             Ok(c) => c,
             Err(e) => {
-                tracing::warn!("Failed to resolve company '{}': {e}", collected.company_name);
+                tracing::warn!(
+                    "Failed to resolve company '{}': {e}",
+                    collected.company_name
+                );
                 continue;
             }
         };

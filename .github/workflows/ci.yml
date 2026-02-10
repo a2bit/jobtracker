@@ -48,6 +48,18 @@ jobs:
         uses: tailscale/github-action@v4
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
+          args: --accept-dns=true
+      - name: Wait for MagicDNS
+        run: |
+          for i in $(seq 1 10); do
+            if nslookup "$REGISTRY" >/dev/null 2>&1; then
+              echo "DNS resolved $REGISTRY on attempt $i"
+              break
+            fi
+            echo "Waiting for MagicDNS... attempt $i"
+            sleep 2
+          done
+          tailscale status
       - name: Tag and push to internal registry
         env:
           GIT_SHA: ${{ github.sha }}

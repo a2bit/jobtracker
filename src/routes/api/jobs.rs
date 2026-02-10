@@ -1,5 +1,5 @@
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use sqlx::PgPool;
 
 use crate::error::AppError;
@@ -13,10 +13,7 @@ pub async fn list(
     Ok(Json(jobs))
 }
 
-pub async fn get(
-    State(pool): State<PgPool>,
-    Path(id): Path<i32>,
-) -> Result<Json<Job>, AppError> {
+pub async fn get(State(pool): State<PgPool>, Path(id): Path<i32>) -> Result<Json<Job>, AppError> {
     let job = Job::get(&pool, id).await?;
     Ok(Json(job))
 }

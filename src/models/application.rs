@@ -61,10 +61,7 @@ impl Application {
             .ok_or_else(|| AppError::NotFound(format!("Application {id} not found")))
     }
 
-    pub async fn create(
-        pool: &PgPool,
-        input: CreateApplication,
-    ) -> Result<Application, AppError> {
+    pub async fn create(pool: &PgPool, input: CreateApplication) -> Result<Application, AppError> {
         let status = input.status.unwrap_or_else(|| "draft".to_string());
         let app = sqlx::query_as::<_, Application>(
             "INSERT INTO applications (job_id, status, cv_variant, notes) VALUES ($1, $2, $3, $4) RETURNING *",
@@ -109,6 +106,7 @@ impl Application {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn count_by_status(pool: &PgPool) -> Result<Vec<(String, i64)>, AppError> {
         let rows: Vec<(String, i64)> = sqlx::query_as(
             "SELECT status, COUNT(*) FROM applications GROUP BY status ORDER BY COUNT(*) DESC",

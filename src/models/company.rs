@@ -36,10 +36,9 @@ pub struct UpdateCompany {
 
 impl Company {
     pub async fn list(pool: &PgPool) -> Result<Vec<Company>, AppError> {
-        let companies =
-            sqlx::query_as::<_, Company>("SELECT * FROM companies ORDER BY name")
-                .fetch_all(pool)
-                .await?;
+        let companies = sqlx::query_as::<_, Company>("SELECT * FROM companies ORDER BY name")
+            .fetch_all(pool)
+            .await?;
         Ok(companies)
     }
 
@@ -65,11 +64,7 @@ impl Company {
         Ok(company)
     }
 
-    pub async fn update(
-        pool: &PgPool,
-        id: i32,
-        input: UpdateCompany,
-    ) -> Result<Company, AppError> {
+    pub async fn update(pool: &PgPool, id: i32, input: UpdateCompany) -> Result<Company, AppError> {
         let existing = Self::get(pool, id).await?;
         let company = sqlx::query_as::<_, Company>(
             "UPDATE companies SET name = $2, website = $3, careers_url = $4, ats_platform = $5, notes = $6, updated_at = NOW() WHERE id = $1 RETURNING *",

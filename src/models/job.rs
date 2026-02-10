@@ -144,6 +144,7 @@ impl Job {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn count(pool: &PgPool) -> Result<i64, AppError> {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
             .fetch_one(pool)

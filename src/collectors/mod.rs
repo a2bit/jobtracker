@@ -10,6 +10,7 @@ use crate::models::job::CreateJob;
 /// Each collector fetches jobs from an external source and returns them
 /// as a vector of CreateJob structs ready for database insertion.
 #[async_trait]
+#[allow(dead_code)]
 pub trait JobCollector: Send + Sync {
     /// Human-readable name matching the collectors table entry.
     fn name(&self) -> &str;

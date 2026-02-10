@@ -57,13 +57,13 @@ impl Event {
         Ok(event)
     }
 
+    #[allow(dead_code)]
     pub async fn recent(pool: &PgPool, limit: i64) -> Result<Vec<Event>, AppError> {
-        let events = sqlx::query_as::<_, Event>(
-            "SELECT * FROM events ORDER BY occurred_at DESC LIMIT $1",
-        )
-        .bind(limit)
-        .fetch_all(pool)
-        .await?;
+        let events =
+            sqlx::query_as::<_, Event>("SELECT * FROM events ORDER BY occurred_at DESC LIMIT $1")
+                .bind(limit)
+                .fetch_all(pool)
+                .await?;
         Ok(events)
     }
 }

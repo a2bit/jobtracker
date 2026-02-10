@@ -6,10 +6,10 @@ mod error;
 mod models;
 mod routes;
 
+use axum::Router;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
 use clap::Parser;
 use sqlx::PgPool;
 use tower_http::cors::CorsLayer;
@@ -23,8 +23,7 @@ async fn healthz() -> impl IntoResponse {
 }
 
 async fn readyz(pool: PgPool) -> impl IntoResponse {
-    let result: Result<(i32,), _> =
-        sqlx::query_as("SELECT 1").fetch_one(&pool).await;
+    let result: Result<(i32,), _> = sqlx::query_as("SELECT 1").fetch_one(&pool).await;
     match result {
         Ok(_) => (StatusCode::OK, "ready"),
         Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "not ready"),
@@ -54,10 +53,7 @@ async fn main() -> anyhow::Result<()> {
     let readyz_pool = pool.clone();
     let app = Router::new()
         .route("/healthz", get(healthz))
-        .route(
-            "/readyz",
-            get(move || readyz(readyz_pool.clone())),
-        )
+        .route("/readyz", get(move || readyz(readyz_pool.clone())))
         .merge(routes::ui::router())
         .merge(routes::api::router(pool))
         .layer(TraceLayer::new_for_http())

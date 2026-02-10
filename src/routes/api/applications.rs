@@ -1,9 +1,11 @@
-use axum::extract::{Path, Query, State};
 use axum::Json;
+use axum::extract::{Path, Query, State};
 use sqlx::PgPool;
 
 use crate::error::AppError;
-use crate::models::application::{Application, ApplicationFilters, CreateApplication, UpdateApplication};
+use crate::models::application::{
+    Application, ApplicationFilters, CreateApplication, UpdateApplication,
+};
 
 pub async fn list(
     State(pool): State<PgPool>,

@@ -24,10 +24,9 @@ pub struct UpdateCollector {
 
 impl Collector {
     pub async fn list(pool: &PgPool) -> Result<Vec<Collector>, AppError> {
-        let collectors =
-            sqlx::query_as::<_, Collector>("SELECT * FROM collectors ORDER BY name")
-                .fetch_all(pool)
-                .await?;
+        let collectors = sqlx::query_as::<_, Collector>("SELECT * FROM collectors ORDER BY name")
+            .fetch_all(pool)
+            .await?;
         Ok(collectors)
     }
 

@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Jobs - JobTracker{% endblock %}
+{% block nav_jobs %}text-accent font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Jobs</h1>
+        <button onclick="document.getElementById('add-job-modal').classList.remove('hidden')"
+                class="bg-accent text-surface px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+            Add Job
+        </button>
+    </div>
+
+    {# Search and filters #}
+    <div class="flex gap-4 items-center">
+        <input type="search" name="search" placeholder="Search jobs..."
+               value="{{ search }}"
+               hx-get="/jobs" hx-target="#job-list" hx-select="#job-list"
+               hx-trigger="input changed delay:300ms, search"
+               hx-push-url="true" hx-include="[name='source']"
+               class="bg-surface-card border border-surface-hover rounded-lg px-4 py-2 text-sm flex-1 focus:outline-none focus:border-accent">
+        <select name="source"
+                hx-get="/jobs" hx-target="#job-list" hx-select="#job-list"
+                hx-trigger="change" hx-push-url="true" hx-include="[name='search']"
+                class="bg-surface-card border border-surface-hover rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-accent">
+            <option value="">All sources</option>
+            <option value="linkedin" {% if source == "linkedin" %}selected{% endif %}>LinkedIn</option>
+            <option value="indeed" {% if source == "indeed" %}selected{% endif %}>Indeed</option>
+            <option value="hiringcafe" {% if source == "hiringcafe" %}selected{% endif %}>HiringCafe</option>
+            <option value="xing" {% if source == "xing" %}selected{% endif %}>Xing</option>
+            <option value="manual" {% if source == "manual" %}selected{% endif %}>Manual</option>
+        </select>
+    </div>
+
+    {# Job list #}
+    <div id="job-list" class="space-y-3">
+        {% if jobs.is_empty() %}
+        <div class="bg-surface-card rounded-lg p-8 text-center text-text-muted">
+            No jobs found. Add your first job or run a collector.
+        </div>
+        {% else %}
+        {% for job in &jobs %}
+        <a href="/jobs/{{ job.id }}" class="block bg-surface-card rounded-lg p-4 hover:bg-surface-hover transition-colors">
+            <div class="flex items-start justify-between">
+                <div>
+                    <div class="font-medium text-lg">{{ job.title }}</div>
+                    <div class="text-text-muted text-sm mt-1">
+                        {% if let Some(loc) = &job.location %}{{ loc }}{% endif %}
+                        {% if let Some(rt) = &job.remote_type %}
+                        <span class="ml-2 px-2 py-0.5 bg-surface rounded text-xs capitalize">{{ rt }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="text-right text-sm">
+                    <div class="px-2 py-0.5 bg-surface rounded text-xs text-text-muted">{{ job.source }}</div>
+                    {% if job.salary_min.is_some() || job.salary_max.is_some() %}
+                    <div class="text-accent mt-1">
+                        {% if let Some(min) = job.salary_min %}{{ min / 1000 }}k{% endif %}
+                        {% if job.salary_min.is_some() && job.salary_max.is_some() %} - {% endif %}
+                        {% if let Some(max) = job.salary_max %}{{ max / 1000 }}k{% endif %}
+                        {{ job.salary_currency.as_deref().unwrap_or("EUR") }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="text-text-dim text-xs mt-2">Found {{ job.found_at.format("%b %d, %Y") }}</div>
+        </a>
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+
+{# Add Job Modal #}
+<div id="add-job-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-surface-card rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Add Job</h2>
+            <button onclick="document.getElementById('add-job-modal').classList.add('hidden')"
+                    class="text-text-muted hover:text-text">&times;</button>
+        </div>
+        <form method="post" action="/jobs" class="space-y-4">
+            <div>
+                <label class="block text-sm text-text-muted mb-1">Company</label>
+                <input type="text" name="company_name" required
+                       class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+            </div>
+            <div>
+                <label class="block text-sm text-text-muted mb-1">Title</label>
+                <input type="text" name="title" required
+                       class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+            </div>
+            <div>
+                <label class="block text-sm text-text-muted mb-1">URL</label>
+                <input type="url" name="url"
+                       class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm text-text-muted mb-1">Location</label>
+                    <input type="text" name="location"
+                           class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                </div>
+                <div>
+                    <label class="block text-sm text-text-muted mb-1">Remote Type</label>
+                    <select name="remote_type"
+                            class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                        <option value="">Not specified</option>
+                        <option value="remote">Remote</option>
+                        <option value="hybrid">Hybrid</option>
+                        <option value="onsite">Onsite</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm text-text-muted mb-1">Salary Min</label>
+                    <input type="number" name="salary_min"
+                           class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                </div>
+                <div>
+                    <label class="block text-sm text-text-muted mb-1">Salary Max</label>
+                    <input type="number" name="salary_max"
+                           class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm text-text-muted mb-1">Source</label>
+                <select name="source" required
+                        class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                    <option value="manual">Manual</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="indeed">Indeed</option>
+                    <option value="hiringcafe">HiringCafe</option>
+                    <option value="xing">Xing</option>
+                </select>
+            </div>
+            <button type="submit"
+                    class="w-full bg-accent text-surface py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                Add Job
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -54,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(move || readyz(readyz_pool.clone())))
-        .merge(routes::ui::router())
+        .merge(routes::ui::router(pool.clone()))
         .merge(routes::api::router(pool))
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive());

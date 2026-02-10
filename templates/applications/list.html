@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Applications - JobTracker{% endblock %}
+{% block nav_applications %}text-accent font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Applications</h1>
+
+    {# Status filter tabs #}
+    <div class="flex gap-2 flex-wrap">
+        <a href="/applications"
+           class="px-4 py-2 rounded-lg text-sm transition-colors {% if status_filter.is_empty() %}bg-accent text-surface{% else %}bg-surface-card hover:bg-surface-hover{% endif %}">
+            All
+        </a>
+        {% for s in &statuses %}
+        <a href="/applications?status={{ s }}"
+           class="px-4 py-2 rounded-lg text-sm transition-colors capitalize {% if status_filter == *s %}bg-accent text-surface{% else %}bg-surface-card hover:bg-surface-hover{% endif %}">
+            {{ s }}
+        </a>
+        {% endfor %}
+    </div>
+
+    {# Application list #}
+    <div class="space-y-3">
+        {% if applications.is_empty() %}
+        <div class="bg-surface-card rounded-lg p-8 text-center text-text-muted">
+            No applications found.
+        </div>
+        {% else %}
+        {% for app in &applications %}
+        <a href="/applications/{{ app.app.id }}" class="block bg-surface-card rounded-lg p-4 hover:bg-surface-hover transition-colors">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="font-medium">{{ app.job_title }}</div>
+                    <div class="text-sm text-text-muted mt-0.5">{{ app.company_name }}</div>
+                </div>
+                <div class="flex items-center gap-3">
+                    {% if let Some(at) = &app.app.applied_at %}
+                    <span class="text-text-dim text-xs">{{ at.format("%b %d") }}</span>
+                    {% endif %}
+                    <span class="capitalize px-3 py-1 rounded-full text-xs font-medium
+                        {% if app.app.status == "draft" %}bg-status-draft/20 text-status-draft
+                        {% else if app.app.status == "applied" %}bg-status-applied/20 text-status-applied
+                        {% else if app.app.status == "interviewing" %}bg-status-interviewing/20 text-status-interviewing
+                        {% else if app.app.status == "offer" %}bg-status-offer/20 text-status-offer
+                        {% else if app.app.status == "accepted" %}bg-status-accepted/20 text-status-accepted
+                        {% else if app.app.status == "rejected" %}bg-status-rejected/20 text-status-rejected
+                        {% else %}bg-status-withdrawn/20 text-status-withdrawn{% endif %}
+                    ">{{ app.app.status }}</span>
+                </div>
+            </div>
+            {% if let Some(cv) = &app.app.cv_variant %}
+            <div class="text-text-dim text-xs mt-2">CV: {{ cv }}</div>
+            {% endif %}
+        </a>
+        {% endfor %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

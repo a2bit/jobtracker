@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.title }} - JobTracker{% endblock %}
+{% block nav_jobs %}text-accent font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Breadcrumb #}
+    <div class="text-sm text-text-muted">
+        <a href="/jobs" class="hover:text-accent">Jobs</a>
+        <span class="mx-2">/</span>
+        <span class="text-text">{{ job.title }}</span>
+    </div>
+
+    {# Job header #}
+    <div class="bg-surface-card rounded-lg p-6">
+        <div class="flex items-start justify-between">
+            <div>
+                <h1 class="text-2xl font-bold">{{ job.title }}</h1>
+                <div class="text-text-muted mt-1">{{ company_name }}</div>
+                <div class="flex items-center gap-3 mt-3 text-sm">
+                    {% if let Some(loc) = &job.location %}
+                    <span>{{ loc }}</span>
+                    {% endif %}
+                    {% if let Some(rt) = &job.remote_type %}
+                    <span class="px-2 py-0.5 bg-surface rounded text-xs capitalize">{{ rt }}</span>
+                    {% endif %}
+                    <span class="px-2 py-0.5 bg-surface rounded text-xs">{{ job.source }}</span>
+                </div>
+                {% if job.salary_min.is_some() || job.salary_max.is_some() %}
+                <div class="text-accent mt-2 font-medium">
+                    {% if let Some(min) = job.salary_min %}{{ min / 1000 }}k{% endif %}
+                    {% if job.salary_min.is_some() && job.salary_max.is_some() %} - {% endif %}
+                    {% if let Some(max) = job.salary_max %}{{ max / 1000 }}k{% endif %}
+                    {{ job.salary_currency.as_deref().unwrap_or("EUR") }}
+                </div>
+                {% endif %}
+            </div>
+            <div class="flex gap-2">
+                {% if let Some(url) = &job.url %}
+                <a href="{{ url }}" target="_blank" rel="noopener"
+                   class="bg-surface hover:bg-surface-hover px-4 py-2 rounded-lg text-sm transition-colors">
+                    View Listing
+                </a>
+                {% endif %}
+                {% if application.is_none() %}
+                <button hx-post="/applications" hx-vals='{"job_id": {{ job.id }}}'
+                        hx-target="body" hx-push-url="true"
+                        class="bg-accent text-surface px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                    Create Application
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Job details #}
+        <div class="lg:col-span-2 space-y-6">
+            {% if let Some(desc) = &job.description %}
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-3">Description</h2>
+                <div class="text-text-muted text-sm whitespace-pre-wrap">{{ desc }}</div>
+            </div>
+            {% endif %}
+
+            {% if let Some(reqs) = &job.requirements %}
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-3">Requirements</h2>
+                <div class="text-text-muted text-sm whitespace-pre-wrap">{{ reqs }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Sidebar #}
+        <div class="space-y-6">
+            {# Application status #}
+            {% if let Some(app) = &application %}
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-3">Application</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-text-muted">Status</span>
+                        <span class="capitalize px-2 py-0.5 rounded text-xs font-medium
+                            {% if app.status == "draft" %}bg-status-draft/20 text-status-draft
+                            {% else if app.status == "applied" %}bg-status-applied/20 text-status-applied
+                            {% else if app.status == "interviewing" %}bg-status-interviewing/20 text-status-interviewing
+                            {% else if app.status == "offer" %}bg-status-offer/20 text-status-offer
+                            {% else if app.status == "accepted" %}bg-status-accepted/20 text-status-accepted
+                            {% else if app.status == "rejected" %}bg-status-rejected/20 text-status-rejected
+                            {% else %}bg-status-withdrawn/20 text-status-withdrawn{% endif %}
+                        ">{{ app.status }}</span>
+                    </div>
+                    {% if let Some(cv) = &app.cv_variant %}
+                    <div class="flex justify-between">
+                        <span class="text-text-muted">CV Variant</span>
+                        <span class="text-xs">{{ cv }}</span>
+                    </div>
+                    {% endif %}
+                    {% if let Some(at) = &app.applied_at %}
+                    <div class="flex justify-between">
+                        <span class="text-text-muted">Applied</span>
+                        <span>{{ at.format("%b %d, %Y") }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <a href="/applications/{{ app.id }}"
+                   class="block mt-4 text-center text-accent text-sm hover:underline">
+                    View Application
+                </a>
+            </div>
+            {% endif %}
+
+            {# Timeline #}
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-3">Timeline</h2>
+                {% if events.is_empty() %}
+                <p class="text-text-muted text-sm">No events yet.</p>
+                {% else %}
+                <div class="space-y-3">
+                    {% for event in &events %}
+                    <div class="flex items-start gap-3 text-sm">
+                        <div class="w-2 h-2 rounded-full bg-accent mt-1.5 flex-shrink-0"></div>
+                        <div>
+                            <div class="capitalize font-medium">{{ event.event_type }}</div>
+                            {% if let Some(desc) = &event.description %}
+                            <div class="text-text-muted text-xs">{{ desc }}</div>
+                            {% endif %}
+                            <div class="text-text-dim text-xs">{{ event.occurred_at.format("%b %d %H:%M") }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            {# Meta info #}
+            <div class="bg-surface-card rounded-lg p-5 text-sm text-text-muted">
+                <div class="flex justify-between mb-1">
+                    <span>Found</span>
+                    <span>{{ job.found_at.format("%b %d, %Y") }}</span>
+                </div>
+                <div class="flex justify-between mb-1">
+                    <span>Source ID</span>
+                    <span>{{ job.source_id.as_deref().unwrap_or("N/A") }}</span>
+                </div>
+                {% if let Some(exp) = &job.expires_at %}
+                <div class="flex justify-between">
+                    <span>Expires</span>
+                    <span>{{ exp.format("%b %d, %Y") }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

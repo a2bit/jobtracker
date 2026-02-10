@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - JobTracker{% endblock %}
+{% block nav_admin %}text-accent font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <h1 class="text-2xl font-bold">Admin</h1>
+
+    {# API Tokens #}
+    <div class="bg-surface-card rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">API Tokens</h2>
+            <button onclick="document.getElementById('add-token-modal').classList.remove('hidden')"
+                    class="bg-accent text-surface px-3 py-1.5 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                Create Token
+            </button>
+        </div>
+        {% if tokens.is_empty() %}
+        <p class="text-text-muted text-sm">No tokens created yet.</p>
+        {% else %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-text-dim border-b border-surface-hover">
+                        <th class="pb-2">Name</th>
+                        <th class="pb-2">Created</th>
+                        <th class="pb-2">Last Used</th>
+                        <th class="pb-2">Expires</th>
+                        <th class="pb-2"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for token in &tokens %}
+                    <tr class="border-b border-surface-hover/50">
+                        <td class="py-2 font-medium">{{ token.name }}</td>
+                        <td class="py-2 text-text-muted">{{ token.created_at.format("%b %d, %Y") }}</td>
+                        <td class="py-2 text-text-muted">
+                            {% if let Some(lu) = &token.last_used %}{{ lu.format("%b %d %H:%M") }}{% else %}Never{% endif %}
+                        </td>
+                        <td class="py-2 text-text-muted">
+                            {% if let Some(exp) = &token.expires_at %}{{ exp.format("%b %d, %Y") }}{% else %}Never{% endif %}
+                        </td>
+                        <td class="py-2 text-right">
+                            <button hx-delete="/admin/tokens/{{ token.id }}" hx-target="body" hx-push-url="true"
+                                    hx-confirm="Revoke token '{{ token.name }}'?"
+                                    class="text-status-rejected text-xs hover:underline">Revoke</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    {# Collectors #}
+    <div class="bg-surface-card rounded-lg p-5">
+        <h2 class="text-lg font-semibold mb-4">Collectors</h2>
+        <div class="space-y-3">
+            {% for collector in &collectors %}
+            <div class="bg-surface rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="w-2 h-2 rounded-full {% if collector.enabled %}bg-status-accepted{% else %}bg-status-draft{% endif %}"></span>
+                        <span class="font-medium capitalize">{{ collector.name }}</span>
+                        <span class="text-xs text-text-dim">
+                            {% if collector.enabled %}Enabled{% else %}Disabled{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {% if let Some(lr) = &collector.last_run_at %}
+                        <span class="text-text-dim text-xs">Last run: {{ lr.format("%b %d %H:%M") }}</span>
+                        {% endif %}
+                        <button hx-post="/admin/collectors/{{ collector.name }}/toggle" hx-target="body" hx-push-url="true"
+                                class="px-3 py-1 rounded text-xs bg-surface-hover hover:bg-surface-card transition-colors">
+                            {% if collector.enabled %}Disable{% else %}Enable{% endif %}
+                        </button>
+                    </div>
+                </div>
+                {% if let Some(err) = &collector.last_error %}
+                <div class="text-status-rejected text-xs mt-2">Error: {{ err }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{# Add Token Modal #}
+<div id="add-token-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-surface-card rounded-xl p-6 w-full max-w-md mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Create API Token</h2>
+            <button onclick="document.getElementById('add-token-modal').classList.add('hidden')"
+                    class="text-text-muted hover:text-text">&times;</button>
+        </div>
+        <form hx-post="/admin/tokens" hx-target="#token-result" hx-swap="innerHTML"
+              class="space-y-4">
+            <div>
+                <label class="block text-sm text-text-muted mb-1">Name</label>
+                <input type="text" name="name" required
+                       class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+            </div>
+            <button type="submit"
+                    class="w-full bg-accent text-surface py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                Create
+            </button>
+        </form>
+        <div id="token-result" class="mt-4"></div>
+    </div>
+</div>
+{% endblock %}

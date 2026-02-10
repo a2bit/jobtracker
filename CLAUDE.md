@@ -123,8 +123,8 @@ Manifests in `deploy/` follow the n8n-cnpg pattern:
 
 ## Implementation Phases
 
-- **Phase 1** (current): Cargo scaffold, migrations, REST API, auth middleware
-- **Phase 2**: Askama templates, htmx dashboard, Tailwind dark mode UI
+- **Phase 1** (done): Cargo scaffold, migrations, REST API, auth middleware
+- **Phase 2** (current): Askama templates, htmx dashboard, Tailwind dark mode UI
 - **Phase 3**: Job collectors (LinkedIn, Indeed, HiringCafe, Xing)
 - **Phase 4**: CI/CD pipeline, ArgoCD deployment, 1Password setup
 - **Phase 5**: Integration with linkedin-job-applier agent, CV pipeline, metrics
@@ -145,3 +145,7 @@ Manifests in `deploy/` follow the n8n-cnpg pattern:
 - `AppError` enum converts to JSON error responses
 - Bearer token auth on all `/api/v1/*` routes
 - Conventional commits: `type(scope): subject`
+
+## Future Features
+
+- Calendar view integrated with the API (application dates, interviews, follow-ups, deadlines)

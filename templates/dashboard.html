@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - JobTracker{% endblock %}
+{% block nav_dashboard %}text-accent font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <h1 class="text-2xl font-bold">Dashboard</h1>
+
+    {# Stats cards #}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-surface-card rounded-lg p-5">
+            <div class="text-text-dim text-xs uppercase tracking-wide">Total Jobs</div>
+            <div class="text-3xl font-bold mt-1">{{ job_count }}</div>
+        </div>
+        <div class="bg-surface-card rounded-lg p-5">
+            <div class="text-text-dim text-xs uppercase tracking-wide">Applications</div>
+            <div class="text-3xl font-bold mt-1">{{ app_count }}</div>
+        </div>
+        <div class="bg-surface-card rounded-lg p-5">
+            <div class="text-text-dim text-xs uppercase tracking-wide">Interviewing</div>
+            <div class="text-3xl font-bold mt-1 text-status-interviewing">{{ interviewing_count }}</div>
+        </div>
+        <div class="bg-surface-card rounded-lg p-5">
+            <div class="text-text-dim text-xs uppercase tracking-wide">Offers</div>
+            <div class="text-3xl font-bold mt-1 text-status-offer">{{ offer_count }}</div>
+        </div>
+    </div>
+
+    {# Status pipeline #}
+    {% if !status_counts.is_empty() %}
+    <div class="bg-surface-card rounded-lg p-5">
+        <h2 class="text-lg font-semibold mb-4">Application Pipeline</h2>
+        <div class="flex gap-2 flex-wrap">
+            {% for sc in &status_counts %}
+            <div class="flex items-center gap-2 bg-surface rounded-full px-4 py-2 text-sm">
+                <span class="w-2 h-2 rounded-full
+                    {% if sc.0 == "draft" %}bg-status-draft
+                    {% else if sc.0 == "applied" %}bg-status-applied
+                    {% else if sc.0 == "interviewing" %}bg-status-interviewing
+                    {% else if sc.0 == "offer" %}bg-status-offer
+                    {% else if sc.0 == "accepted" %}bg-status-accepted
+                    {% else if sc.0 == "rejected" %}bg-status-rejected
+                    {% else %}bg-status-withdrawn{% endif %}
+                "></span>
+                <span class="capitalize">{{ sc.0 }}</span>
+                <span class="font-bold">{{ sc.1 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {# Recent jobs #}
+        <div class="bg-surface-card rounded-lg p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Recent Jobs</h2>
+                <a href="/jobs" class="text-accent text-sm hover:underline">View all</a>
+            </div>
+            {% if recent_jobs.is_empty() %}
+            <p class="text-text-muted text-sm">No jobs tracked yet.</p>
+            {% else %}
+            <div class="space-y-3">
+                {% for job in &recent_jobs %}
+                <a href="/jobs/{{ job.id }}" class="block bg-surface rounded-lg p-3 hover:bg-surface-hover transition-colors">
+                    <div class="font-medium">{{ job.title }}</div>
+                    <div class="text-sm text-text-muted flex items-center gap-2 mt-1">
+                        <span>{{ job.source }}</span>
+                        {% if let Some(loc) = &job.location %}
+                        <span class="text-text-dim">|</span>
+                        <span>{{ loc }}</span>
+                        {% endif %}
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        {# Recent events #}
+        <div class="bg-surface-card rounded-lg p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold">Recent Activity</h2>
+            </div>
+            {% if recent_events.is_empty() %}
+            <p class="text-text-muted text-sm">No activity yet.</p>
+            {% else %}
+            <div class="space-y-3">
+                {% for event in &recent_events %}
+                <div class="flex items-start gap-3 text-sm">
+                    <div class="w-2 h-2 rounded-full bg-accent mt-1.5 flex-shrink-0"></div>
+                    <div>
+                        <div class="capitalize font-medium">{{ event.event_type }}</div>
+                        {% if let Some(desc) = &event.description %}
+                        <div class="text-text-muted">{{ desc }}</div>
+                        {% endif %}
+                        <div class="text-text-dim text-xs mt-0.5">{{ event.occurred_at.format("%b %d, %Y %H:%M") }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

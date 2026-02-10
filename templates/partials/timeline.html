@@ -1,0 +1,18 @@
+{% if events.is_empty() %}
+<p class="text-text-muted text-sm">No events yet.</p>
+{% else %}
+<div class="space-y-3">
+    {% for event in &events %}
+    <div class="flex items-start gap-3 text-sm">
+        <div class="w-2 h-2 rounded-full bg-accent mt-1.5 flex-shrink-0"></div>
+        <div>
+            <div class="capitalize font-medium">{{ event.event_type }}</div>
+            {% if let Some(desc) = &event.description %}
+            <div class="text-text-muted text-xs">{{ desc }}</div>
+            {% endif %}
+            <div class="text-text-dim text-xs">{{ event.occurred_at.format("%b %d %H:%M") }}</div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

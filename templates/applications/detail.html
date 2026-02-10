@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Application - {{ job.title }} - JobTracker{% endblock %}
+{% block nav_applications %}text-accent font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    {# Breadcrumb #}
+    <div class="text-sm text-text-muted">
+        <a href="/applications" class="hover:text-accent">Applications</a>
+        <span class="mx-2">/</span>
+        <span class="text-text">{{ job.title }}</span>
+    </div>
+
+    {# Header with status #}
+    <div class="bg-surface-card rounded-lg p-6">
+        <div class="flex items-start justify-between">
+            <div>
+                <h1 class="text-2xl font-bold">{{ job.title }}</h1>
+                <div class="text-text-muted mt-1">{{ company_name }}</div>
+            </div>
+            <span class="capitalize px-4 py-2 rounded-full text-sm font-medium
+                {% if application.status == "draft" %}bg-status-draft/20 text-status-draft
+                {% else if application.status == "applied" %}bg-status-applied/20 text-status-applied
+                {% else if application.status == "interviewing" %}bg-status-interviewing/20 text-status-interviewing
+                {% else if application.status == "offer" %}bg-status-offer/20 text-status-offer
+                {% else if application.status == "accepted" %}bg-status-accepted/20 text-status-accepted
+                {% else if application.status == "rejected" %}bg-status-rejected/20 text-status-rejected
+                {% else %}bg-status-withdrawn/20 text-status-withdrawn{% endif %}
+            ">{{ application.status }}</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {# Status update + details #}
+        <div class="lg:col-span-2 space-y-6">
+            {# Update status #}
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-4">Update Status</h2>
+                <form hx-put="/applications/{{ application.id }}" hx-target="body" hx-push-url="true"
+                      class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm text-text-muted mb-1">Status</label>
+                            <select name="status"
+                                    class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                                {% for s in &statuses %}
+                                <option value="{{ s }}" {% if application.status == *s %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-text-muted mb-1">CV Variant</label>
+                            <input type="text" name="cv_variant" value="{{ application.cv_variant.as_deref().unwrap_or("") }}"
+                                   class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-text-muted mb-1">Notes</label>
+                        <textarea name="notes" rows="3"
+                                  class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">{{ application.notes.as_deref().unwrap_or("") }}</textarea>
+                    </div>
+                    <button type="submit"
+                            class="bg-accent text-surface px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                        Update
+                    </button>
+                </form>
+            </div>
+
+            {# Add event #}
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-4">Add Event</h2>
+                <form hx-post="/events" hx-target="#timeline" hx-swap="innerHTML"
+                      hx-on::after-request="if(event.detail.successful) this.reset()"
+                      class="space-y-4">
+                    <input type="hidden" name="application_id" value="{{ application.id }}">
+                    <input type="hidden" name="job_id" value="{{ job.id }}">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm text-text-muted mb-1">Type</label>
+                            <select name="event_type" required
+                                    class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                                <option value="note">Note</option>
+                                <option value="applied">Applied</option>
+                                <option value="phone_screen">Phone Screen</option>
+                                <option value="interview">Interview</option>
+                                <option value="rejection">Rejection</option>
+                                <option value="offer">Offer</option>
+                                <option value="found">Found</option>
+                                <option value="saved">Saved</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-text-muted mb-1">Description</label>
+                            <input type="text" name="description"
+                                   class="w-full bg-surface border border-surface-hover rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent">
+                        </div>
+                    </div>
+                    <button type="submit"
+                            class="bg-surface hover:bg-surface-hover border border-surface-hover px-4 py-2 rounded-lg text-sm transition-colors">
+                        Add Event
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {# Timeline sidebar #}
+        <div class="space-y-6">
+            <div class="bg-surface-card rounded-lg p-5">
+                <h2 class="text-lg font-semibold mb-3">Timeline</h2>
+                <div id="timeline">
+                    {% include "partials/timeline.html" %}
+                </div>
+            </div>
+
+            {# Details #}
+            <div class="bg-surface-card rounded-lg p-5 text-sm">
+                <h2 class="text-lg font-semibold mb-3">Details</h2>
+                <div class="space-y-2 text-text-muted">
+                    {% if let Some(at) = &application.applied_at %}
+                    <div class="flex justify-between">
+                        <span>Applied</span>
+                        <span>{{ at.format("%b %d, %Y") }}</span>
+                    </div>
+                    {% endif %}
+                    {% if let Some(at) = &application.response_at %}
+                    <div class="flex justify-between">
+                        <span>Response</span>
+                        <span>{{ at.format("%b %d, %Y") }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="flex justify-between">
+                        <span>Created</span>
+                        <span>{{ application.created_at.format("%b %d, %Y") }}</span>
+                    </div>
+                </div>
+                <a href="/jobs/{{ job.id }}" class="block mt-4 text-center text-accent text-sm hover:underline">
+                    View Job
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

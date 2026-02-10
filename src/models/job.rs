@@ -144,11 +144,18 @@ impl Job {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub async fn count(pool: &PgPool) -> Result<i64, AppError> {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
             .fetch_one(pool)
             .await?;
         Ok(row.0)
+    }
+
+    pub async fn recent(pool: &PgPool, limit: i64) -> Result<Vec<Job>, AppError> {
+        let jobs = sqlx::query_as::<_, Job>("SELECT * FROM jobs ORDER BY found_at DESC LIMIT $1")
+            .bind(limit)
+            .fetch_all(pool)
+            .await?;
+        Ok(jobs)
     }
 }

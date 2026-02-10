@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}JobTracker{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        surface: { DEFAULT: '#1e1e2e', alt: '#181825', card: '#313244', hover: '#45475a' },
+                        accent: { DEFAULT: '#cba6f7', dim: '#9399b2' },
+                        text: { DEFAULT: '#cdd6f4', muted: '#a6adc8', dim: '#585b70' },
+                        status: {
+                            draft: '#9399b2',
+                            applied: '#89b4fa',
+                            interviewing: '#f9e2af',
+                            offer: '#a6e3a1',
+                            accepted: '#a6e3a1',
+                            rejected: '#f38ba8',
+                            withdrawn: '#9399b2',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="/static/js/htmx.min.js"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+        .htmx-request.htmx-indicator { display: inline-block; }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .htmx-added { animation: fade-in 0.3s ease-out; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-surface text-text min-h-screen" hx-boost="true">
+    <nav class="bg-surface-alt border-b border-surface-card px-6 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="text-xl font-bold text-accent">JobTracker</a>
+            <div class="flex items-center gap-6 text-sm">
+                <a href="/" class="hover:text-accent transition-colors {% block nav_dashboard %}{% endblock %}">Dashboard</a>
+                <a href="/jobs" class="hover:text-accent transition-colors {% block nav_jobs %}{% endblock %}">Jobs</a>
+                <a href="/applications" class="hover:text-accent transition-colors {% block nav_applications %}{% endblock %}">Applications</a>
+                <a href="/admin" class="hover:text-accent transition-colors {% block nav_admin %}{% endblock %}">Admin</a>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

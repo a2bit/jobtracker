@@ -52,7 +52,7 @@ jobs:
         env:
           GIT_SHA: ${{ github.sha }}
         run: |
-          docker tag "$IMAGE_NAME:$GIT_SHA" "$REGISTRY/$IMAGE_NAME:$GIT_SHA"
-          docker tag "$IMAGE_NAME:$GIT_SHA" "$REGISTRY/$IMAGE_NAME:latest"
-          docker push "$REGISTRY/$IMAGE_NAME:$GIT_SHA"
-          docker push "$REGISTRY/$IMAGE_NAME:latest"
+          SHORT_SHA="${GIT_SHA:0:7}"
+          docker tag "$IMAGE_NAME:$GIT_SHA" "$REGISTRY/$IMAGE_NAME:$SHORT_SHA"
+          docker push "$REGISTRY/$IMAGE_NAME:$SHORT_SHA"
+          echo "Pushed $REGISTRY/$IMAGE_NAME:$SHORT_SHA"

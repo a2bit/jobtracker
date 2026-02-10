@@ -6,9 +6,16 @@ resources:
   - objectstore-b2.yaml
   - cnpg-cluster.yaml
   - deployment.yaml
+  - deployment-worker.yaml
   - service.yaml
   - ingress.yaml
-commonLabels:
-  app.kubernetes.io/name: jobtracker
-  app.kubernetes.io/component: application
-  app.kubernetes.io/part-of: jobtracker
+labels:
+  - pairs:
+      app.kubernetes.io/name: jobtracker
+      app.kubernetes.io/part-of: jobtracker
+    includeSelectors: true
+# Image tag managed here. Update newTag after CI builds.
+# CI pushes: registry-push.tail74b58.ts.net/jobtracker:<short-sha>
+images:
+  - name: registry-push.tail74b58.ts.net/jobtracker
+    newTag: d638b18

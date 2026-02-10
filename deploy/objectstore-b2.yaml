@@ -1,0 +1,24 @@
+# Backblaze B2 ObjectStore for jobtracker PostgreSQL backups
+# kubeconform-skip: CloudNativePG CRD
+#
+# Uses Barman Cloud plugin for WAL archiving and base backups.
+# Stored in same bucket as Velero but different prefix.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: backblaze-b2
+  namespace: jobtracker
+spec:
+  configuration:
+    destinationPath: s3://kojak-homelab-velero-backups/postgres/jobtracker/
+    endpointURL: https://s3.us-west-004.backblazeb2.com
+    s3Credentials:
+      accessKeyId:
+        name: cnpg-b2-credentials
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: cnpg-b2-credentials
+        key: ACCESS_SECRET_KEY
+  wal:
+    compression: gzip
+    maxParallel: 2

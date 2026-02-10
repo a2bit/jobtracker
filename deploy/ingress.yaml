@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jobtracker
+  namespace: jobtracker
+spec:
+  ingressClassName: tailscale
+  rules:
+    - host: jobtracker.tail74b58.ts.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jobtracker
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - jobtracker.tail74b58.ts.net

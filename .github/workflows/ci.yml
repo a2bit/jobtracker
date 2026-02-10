@@ -1,0 +1,58 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+env:
+  CARGO_TERM_COLOR: always
+  REGISTRY: registry-push.tail74b58.ts.net
+  IMAGE_NAME: jobtracker
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Format check
+        run: cargo fmt -- --check
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+      - name: Test
+        run: cargo test
+  build-and-push:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE_NAME:$GIT_SHA" .
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+      - name: Tag and push to internal registry
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          docker tag "$IMAGE_NAME:$GIT_SHA" "$REGISTRY/$IMAGE_NAME:$GIT_SHA"
+          docker tag "$IMAGE_NAME:$GIT_SHA" "$REGISTRY/$IMAGE_NAME:latest"
+          docker push "$REGISTRY/$IMAGE_NAME:$GIT_SHA"
+          docker push "$REGISTRY/$IMAGE_NAME:latest"

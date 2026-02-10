@@ -19,4 +19,4 @@ labels:
 # CI pushes: registry-push.tail74b58.ts.net/jobtracker:<short-sha>
 images:
   - name: registry-push.tail74b58.ts.net/jobtracker
-    newTag: a85837d
+    newTag: 7c95c7c

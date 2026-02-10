@@ -46,31 +46,22 @@ impl JobCollector for HiringCafe {
             })
             .unwrap_or("");
 
-        // Try native reqwest first, fall back to Python CLI on 429
-        match self.collect_native(config, query).await {
-            Ok(jobs) => Ok(jobs),
-            Err(e) => {
-                let msg = e.to_string();
-                if msg.contains("429") || msg.contains("Too Many Requests") {
-                    tracing::warn!("HiringCafe returned 429, falling back to Python CLI");
-                    self.collect_via_cli(query).await
-                } else {
-                    Err(e)
-                }
-            }
-        }
+        self.collect_native(config, query).await
     }
 }
 
 impl HiringCafe {
     /// Fetch jobs using reqwest with browser-like headers.
     /// Paginates up to MAX_PAGES pages (PAGE_SIZE each) to collect all results.
+    /// Retries on 429 with exponential backoff, and delays between pages.
     async fn collect_native(
         &self,
         config: &Value,
         query: &str,
     ) -> Result<Vec<CollectedJob>, AppError> {
         const MAX_PAGES: u32 = 5;
+        const MAX_RETRIES: u32 = 3;
+        const PAGE_DELAY: Duration = Duration::from_secs(3);
 
         let state = build_state(config, query);
         let encoded = encode_state(&state);
@@ -85,37 +76,17 @@ impl HiringCafe {
         let mut all_jobs = Vec::new();
 
         for page in 0..MAX_PAGES {
+            // Delay between pages to avoid rate limiting (skip before first page)
+            if page > 0 {
+                tokio::time::sleep(PAGE_DELAY).await;
+            }
+
             let url = format!(
                 "{BASE_URL}/api/search-jobs?s={}&size={PAGE_SIZE}&page={page}",
                 urlencoded(&encoded)
             );
 
-            let resp = client
-                .get(&url)
-                .header("Accept", "application/json,text/html,*/*;q=0.8")
-                .header("Accept-Language", "de-DE,de;q=0.9,en;q=0.8")
-                .header("Sec-Fetch-Dest", "document")
-                .header("Sec-Fetch-Mode", "navigate")
-                .header("Sec-Fetch-Site", "none")
-                .send()
-                .await
-                .map_err(|e| AppError::Internal(format!("HiringCafe request failed: {e}")))?;
-
-            if resp.status().as_u16() == 429 {
-                return Err(AppError::Internal("429 Too Many Requests".to_string()));
-            }
-
-            if !resp.status().is_success() {
-                return Err(AppError::Internal(format!(
-                    "HiringCafe returned {}",
-                    resp.status()
-                )));
-            }
-
-            let data: Value = resp
-                .json()
-                .await
-                .map_err(|e| AppError::Internal(format!("Failed to parse response: {e}")))?;
+            let data = self.fetch_with_retry(&client, &url, MAX_RETRIES).await?;
 
             let page_jobs = parse_results(&data)?;
             let count = page_jobs.len() as u32;
@@ -130,41 +101,58 @@ impl HiringCafe {
         Ok(all_jobs)
     }
 
-    /// Fallback: shell out to the Python CLI which uses curl_cffi for TLS fingerprinting.
-    async fn collect_via_cli(&self, query: &str) -> Result<Vec<CollectedJob>, AppError> {
-        let output = tokio::time::timeout(
-            Duration::from_secs(60),
-            tokio::process::Command::new("hiringcafe-cli")
-                .args(["search", query, "--llm", "--count", "40"])
-                .output(),
-        )
-        .await
-        .map_err(|_| AppError::Internal("hiringcafe-cli timed out after 60s".into()))?
-        .map_err(|e| AppError::Internal(format!("Failed to run hiringcafe-cli: {e}")))?;
+    /// Fetch a URL with retry on 429 (exponential backoff: 5s, 10s, 20s).
+    async fn fetch_with_retry(
+        &self,
+        client: &reqwest::Client,
+        url: &str,
+        max_retries: u32,
+    ) -> Result<Value, AppError> {
+        let mut backoff = Duration::from_secs(5);
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(AppError::Internal(format!(
-                "hiringcafe-cli failed: {stderr}"
-            )));
-        }
+        for attempt in 0..=max_retries {
+            let resp = client
+                .get(url)
+                .header("Accept", "application/json,text/html,*/*;q=0.8")
+                .header("Accept-Language", "de-DE,de;q=0.9,en;q=0.8")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "none")
+                .send()
+                .await
+                .map_err(|e| AppError::Internal(format!("HiringCafe request failed: {e}")))?;
 
-        let data: Value = serde_json::from_slice(&output.stdout)
-            .map_err(|e| AppError::Internal(format!("Failed to parse CLI output: {e}")))?;
-
-        let jobs = data
-            .get("jobs")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-
-        let mut collected = Vec::new();
-        for job in &jobs {
-            if let Some(cj) = parse_cli_job(job) {
-                collected.push(cj);
+            if resp.status().as_u16() == 429 {
+                if attempt < max_retries {
+                    tracing::warn!(
+                        "HiringCafe 429, retrying in {}s (attempt {}/{})",
+                        backoff.as_secs(),
+                        attempt + 1,
+                        max_retries
+                    );
+                    tokio::time::sleep(backoff).await;
+                    backoff *= 2;
+                    continue;
+                }
+                return Err(AppError::Internal(
+                    "HiringCafe 429 after all retries exhausted".to_string(),
+                ));
             }
+
+            if !resp.status().is_success() {
+                return Err(AppError::Internal(format!(
+                    "HiringCafe returned {}",
+                    resp.status()
+                )));
+            }
+
+            return resp
+                .json()
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to parse response: {e}")));
         }
-        Ok(collected)
+
+        unreachable!()
     }
 }
 
@@ -397,49 +385,6 @@ fn parse_api_job(raw: &Value) -> Option<CollectedJob> {
         source: "hiringcafe".to_string(),
         source_id,
         raw_data: Some(raw.clone()),
-    })
-}
-
-/// Parse a job from the Python CLI's --llm JSON output format.
-fn parse_cli_job(job: &Value) -> Option<CollectedJob> {
-    let title = job.get("title").and_then(|v| v.as_str())?.to_string();
-    let company_name = job
-        .get("company")
-        .and_then(|v| v.as_str())
-        .unwrap_or("Unknown")
-        .to_string();
-
-    let source_id = job
-        .get("id")
-        .or_else(|| job.get("requisition_id"))
-        .and_then(|v| v.as_str())?
-        .to_string();
-
-    Some(CollectedJob {
-        company_name,
-        title,
-        url: job
-            .get("apply_url")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        location: job
-            .get("location")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        remote_type: job
-            .get("workplace_type")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        salary_min: None,
-        salary_max: None,
-        salary_currency: None,
-        description: job
-            .get("description_html")
-            .and_then(|v| v.as_str())
-            .map(String::from),
-        source: "hiringcafe".to_string(),
-        source_id,
-        raw_data: Some(job.clone()),
     })
 }
 

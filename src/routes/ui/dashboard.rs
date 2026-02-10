@@ -3,7 +3,7 @@ use axum::extract::State;
 use axum::response::Html;
 use sqlx::PgPool;
 
-use crate::error::AppError;
+use crate::error::{AppError, HtmlError};
 use crate::models::event::Event;
 use crate::models::job::Job;
 
@@ -19,7 +19,7 @@ struct DashboardTemplate {
     recent_events: Vec<Event>,
 }
 
-pub async fn index(State(pool): State<PgPool>) -> Result<Html<String>, AppError> {
+pub async fn index(State(pool): State<PgPool>) -> Result<Html<String>, HtmlError> {
     let job_count = Job::count(&pool).await.unwrap_or(0);
 
     let status_counts = crate::models::application::Application::count_by_status(&pool)

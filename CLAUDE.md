@@ -194,7 +194,9 @@ short SHA (e.g., `a85837d`).
 - **Phase 2** (done): Askama templates, htmx dashboard, Tailwind dark mode UI
 - **Phase 3** (done): HiringCafe collector, DB queue (SKIP LOCKED), worker subcommand, admin run history
 - **Phase 4** (done): CI/CD pipeline, ArgoCD deployment, Image Updater, 1Password secrets, Slack notifications
-- **Phase 5**: Integration with linkedin-job-applier agent, CV pipeline, metrics
+- **Phase 5** (done): Upsert-on-conflict updates, collector pagination (5 pages),
+  HTTP timeouts, graceful shutdown, stale run recovery, UI pagination,
+  HTML error pages, missing DB indexes
 
 ## Configuration
 

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -62,61 +64,83 @@ impl JobCollector for HiringCafe {
 
 impl HiringCafe {
     /// Fetch jobs using reqwest with browser-like headers.
+    /// Paginates up to MAX_PAGES pages (PAGE_SIZE each) to collect all results.
     async fn collect_native(
         &self,
         config: &Value,
         query: &str,
     ) -> Result<Vec<CollectedJob>, AppError> {
+        const MAX_PAGES: u32 = 5;
+
         let state = build_state(config, query);
         let encoded = encode_state(&state);
 
         let client = reqwest::Client::builder()
             .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
             .build()
             .map_err(|e| AppError::Internal(format!("Failed to build HTTP client: {e}")))?;
 
-        let url = format!(
-            "{BASE_URL}/api/search-jobs?s={}&size={PAGE_SIZE}&page=0",
-            urlencoded(&encoded)
-        );
+        let mut all_jobs = Vec::new();
 
-        let resp = client
-            .get(&url)
-            .header("Accept", "application/json,text/html,*/*;q=0.8")
-            .header("Accept-Language", "de-DE,de;q=0.9,en;q=0.8")
-            .header("Sec-Fetch-Dest", "document")
-            .header("Sec-Fetch-Mode", "navigate")
-            .header("Sec-Fetch-Site", "none")
-            .send()
-            .await
-            .map_err(|e| AppError::Internal(format!("HiringCafe request failed: {e}")))?;
+        for page in 0..MAX_PAGES {
+            let url = format!(
+                "{BASE_URL}/api/search-jobs?s={}&size={PAGE_SIZE}&page={page}",
+                urlencoded(&encoded)
+            );
 
-        if resp.status().as_u16() == 429 {
-            return Err(AppError::Internal("429 Too Many Requests".to_string()));
+            let resp = client
+                .get(&url)
+                .header("Accept", "application/json,text/html,*/*;q=0.8")
+                .header("Accept-Language", "de-DE,de;q=0.9,en;q=0.8")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "none")
+                .send()
+                .await
+                .map_err(|e| AppError::Internal(format!("HiringCafe request failed: {e}")))?;
+
+            if resp.status().as_u16() == 429 {
+                return Err(AppError::Internal("429 Too Many Requests".to_string()));
+            }
+
+            if !resp.status().is_success() {
+                return Err(AppError::Internal(format!(
+                    "HiringCafe returned {}",
+                    resp.status()
+                )));
+            }
+
+            let data: Value = resp
+                .json()
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to parse response: {e}")))?;
+
+            let page_jobs = parse_results(&data)?;
+            let count = page_jobs.len() as u32;
+            tracing::info!("Page {page}: {count} jobs");
+            all_jobs.extend(page_jobs);
+
+            if count < PAGE_SIZE {
+                break; // last page
+            }
         }
 
-        if !resp.status().is_success() {
-            return Err(AppError::Internal(format!(
-                "HiringCafe returned {}",
-                resp.status()
-            )));
-        }
-
-        let data: Value = resp
-            .json()
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to parse response: {e}")))?;
-
-        parse_results(&data)
+        Ok(all_jobs)
     }
 
     /// Fallback: shell out to the Python CLI which uses curl_cffi for TLS fingerprinting.
     async fn collect_via_cli(&self, query: &str) -> Result<Vec<CollectedJob>, AppError> {
-        let output = tokio::process::Command::new("hiringcafe-cli")
-            .args(["search", query, "--llm", "--count", "40"])
-            .output()
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to run hiringcafe-cli: {e}")))?;
+        let output = tokio::time::timeout(
+            Duration::from_secs(60),
+            tokio::process::Command::new("hiringcafe-cli")
+                .args(["search", query, "--llm", "--count", "40"])
+                .output(),
+        )
+        .await
+        .map_err(|_| AppError::Internal("hiringcafe-cli timed out after 60s".into()))?
+        .map_err(|e| AppError::Internal(format!("Failed to run hiringcafe-cli: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

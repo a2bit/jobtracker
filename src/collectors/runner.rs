@@ -9,6 +9,7 @@ use crate::models::company::Company;
 use crate::models::job::{CreateJob, Job};
 
 /// Main worker loop: poll for pending runs and process them.
+/// Recovers stale runs on startup and exits gracefully on SIGTERM/SIGINT.
 pub async fn run(pool: PgPool, collector_name: &str, poll_interval: u64) -> anyhow::Result<()> {
     let collector_impl = get_collector(collector_name)
         .ok_or_else(|| anyhow::anyhow!("Unknown collector: {collector_name}"))?;
@@ -18,17 +19,37 @@ pub async fn run(pool: PgPool, collector_name: &str, poll_interval: u64) -> anyh
         anyhow::bail!("Collector '{collector_name}' is disabled");
     }
 
+    // Recover any runs left in "running" state from a previous crash
+    let stale = CollectorRun::recover_stale(&pool, collector_name).await?;
+    if stale > 0 {
+        tracing::warn!("Recovered {stale} stale 'running' runs for '{collector_name}'");
+    }
+
     tracing::info!(
         "Worker started for collector '{collector_name}', polling every {poll_interval}s"
     );
 
     loop {
-        if let Some(run) = CollectorRun::claim_next(&pool, collector_name).await? {
-            tracing::info!("Claimed run {} for '{collector_name}'", run.id);
-            process_run(&pool, &*collector_impl, &run).await;
+        tokio::select! {
+            biased;
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("Shutdown signal received, exiting gracefully");
+                break;
+            }
+            result = async {
+                if let Some(run) = CollectorRun::claim_next(&pool, collector_name).await? {
+                    tracing::info!("Claimed run {} for '{collector_name}'", run.id);
+                    process_run(&pool, &*collector_impl, &run).await;
+                }
+                tokio::time::sleep(Duration::from_secs(poll_interval)).await;
+                Ok::<(), anyhow::Error>(())
+            } => {
+                result?;
+            }
         }
-        tokio::time::sleep(Duration::from_secs(poll_interval)).await;
     }
+
+    Ok(())
 }
 
 async fn process_run(pool: &PgPool, collector: &dyn super::JobCollector, run: &CollectorRun) {
@@ -44,9 +65,12 @@ async fn process_run(pool: &PgPool, collector: &dyn super::JobCollector, run: &C
 
     match collector.collect(&config).await {
         Ok(jobs) => {
-            let (found, new) = upsert_jobs(pool, jobs).await;
-            tracing::info!("Run {} completed: {found} found, {new} new", run.id);
-            let _ = CollectorRun::mark_succeeded(pool, run.id, found, new).await;
+            let (found, new, updated) = upsert_jobs(pool, jobs).await;
+            tracing::info!(
+                "Run {} completed: {found} found, {new} new, {updated} updated",
+                run.id
+            );
+            let _ = CollectorRun::mark_succeeded(pool, run.id, found, new, updated).await;
             let _ = Collector::record_run(pool, &run.collector_name, None).await;
         }
         Err(e) => {
@@ -58,9 +82,10 @@ async fn process_run(pool: &PgPool, collector: &dyn super::JobCollector, run: &C
     }
 }
 
-async fn upsert_jobs(pool: &PgPool, jobs: Vec<CollectedJob>) -> (i32, i32) {
+async fn upsert_jobs(pool: &PgPool, jobs: Vec<CollectedJob>) -> (i32, i32, i32) {
     let found = jobs.len() as i32;
     let mut new = 0;
+    let mut updated = 0;
 
     for collected in jobs {
         let company = match Company::find_or_create(pool, &collected.company_name).await {
@@ -92,13 +117,18 @@ async fn upsert_jobs(pool: &PgPool, jobs: Vec<CollectedJob>) -> (i32, i32) {
         };
 
         match Job::upsert(pool, input).await {
-            Ok(Some(_)) => new += 1,
-            Ok(None) => {} // duplicate, skipped
+            Ok((_job, was_inserted)) => {
+                if was_inserted {
+                    new += 1;
+                } else {
+                    updated += 1;
+                }
+            }
             Err(e) => {
                 tracing::warn!("Failed to upsert job: {e}");
             }
         }
     }
 
-    (found, new)
+    (found, new, updated)
 }

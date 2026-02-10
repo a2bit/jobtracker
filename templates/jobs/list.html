@@ -69,6 +69,25 @@
         </a>
         {% endfor %}
         {% endif %}
+
+        {# Pagination #}
+        {% if total_pages > 1 %}
+        <div class="flex justify-center items-center gap-4 mt-6">
+            {% if page > 1 %}
+            <a href="/jobs?page={{ page - 1 }}&search={{ search }}&source={{ source }}"
+               class="px-4 py-2 bg-surface-card rounded-lg text-sm hover:bg-surface-hover transition-colors">
+                Previous
+            </a>
+            {% endif %}
+            <span class="px-4 py-2 text-sm text-text-muted">Page {{ page }} of {{ total_pages }}</span>
+            {% if page < total_pages %}
+            <a href="/jobs?page={{ page + 1 }}&search={{ search }}&source={{ source }}"
+               class="px-4 py-2 bg-surface-card rounded-lg text-sm hover:bg-surface-hover transition-colors">
+                Next
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </div>
 

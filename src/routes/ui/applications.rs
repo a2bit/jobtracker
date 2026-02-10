@@ -5,7 +5,7 @@ use axum::response::{Html, Redirect};
 use serde::Deserialize;
 use sqlx::PgPool;
 
-use crate::error::AppError;
+use crate::error::{AppError, HtmlError};
 use crate::models::application::{Application, ApplicationFilters, UpdateApplication};
 use crate::models::event::{CreateEvent, Event};
 use crate::models::job::Job;
@@ -61,7 +61,7 @@ pub struct AppListQuery {
 pub async fn list(
     State(pool): State<PgPool>,
     Query(query): Query<AppListQuery>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Html<String>, HtmlError> {
     let filters = ApplicationFilters {
         status: query.status.clone().filter(|s| !s.is_empty()),
     };
@@ -99,7 +99,7 @@ pub async fn list(
 pub async fn detail(
     State(pool): State<PgPool>,
     Path(id): Path<i32>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Html<String>, HtmlError> {
     let application = Application::get(&pool, id).await?;
     let job = Job::get(&pool, application.job_id).await?;
     let company_name: (String,) = sqlx::query_as("SELECT name FROM companies WHERE id = $1")
@@ -136,7 +136,7 @@ pub struct CreateAppForm {
 pub async fn create(
     State(pool): State<PgPool>,
     Form(input): Form<CreateAppForm>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, HtmlError> {
     let app = Application::create(
         &pool,
         crate::models::application::CreateApplication {
@@ -161,7 +161,7 @@ pub async fn update(
     State(pool): State<PgPool>,
     Path(id): Path<i32>,
     Form(input): Form<UpdateAppForm>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, HtmlError> {
     Application::update(
         &pool,
         id,
@@ -188,7 +188,7 @@ pub struct CreateEventForm {
 pub async fn create_event(
     State(pool): State<PgPool>,
     Form(input): Form<CreateEventForm>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Html<String>, HtmlError> {
     let event = Event::create(
         &pool,
         CreateEvent {

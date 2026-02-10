@@ -12,6 +12,7 @@ pub struct CollectorRun {
     pub run_kind: String,
     pub jobs_found: Option<i32>,
     pub jobs_new: Option<i32>,
+    pub jobs_updated: Option<i32>,
     pub error: Option<String>,
     pub requested_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
@@ -65,16 +66,31 @@ impl CollectorRun {
         id: i32,
         jobs_found: i32,
         jobs_new: i32,
+        jobs_updated: i32,
     ) -> Result<(), AppError> {
         sqlx::query(
-            "UPDATE collector_runs SET status = 'succeeded', jobs_found = $2, jobs_new = $3, finished_at = NOW() WHERE id = $1",
+            "UPDATE collector_runs SET status = 'succeeded', jobs_found = $2, jobs_new = $3, jobs_updated = $4, finished_at = NOW() WHERE id = $1",
         )
         .bind(id)
         .bind(jobs_found)
         .bind(jobs_new)
+        .bind(jobs_updated)
         .execute(pool)
         .await?;
         Ok(())
+    }
+
+    /// Reset stale "running" runs to "failed" on worker startup.
+    /// This handles the case where a worker crashed mid-run.
+    pub async fn recover_stale(pool: &PgPool, collector_name: &str) -> Result<u64, AppError> {
+        let result = sqlx::query(
+            "UPDATE collector_runs SET status = 'failed', error = 'Worker crashed (stale recovery)', finished_at = NOW()
+             WHERE collector_name = $1 AND status = 'running'",
+        )
+        .bind(collector_name)
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     /// Mark a run as failed with an error message.

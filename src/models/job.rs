@@ -113,11 +113,25 @@ impl Job {
         Ok(job)
     }
 
-    /// Insert a job, skipping if a row with the same (source, source_id) already exists.
-    /// Returns Some(job) if inserted, None if it was a duplicate.
-    pub async fn upsert(pool: &PgPool, input: CreateJob) -> Result<Option<Job>, AppError> {
+    /// Upsert a job: insert if new, update mutable fields if (source, source_id) exists.
+    /// Returns (job, was_inserted). `was_inserted` is true for new rows, false for updates.
+    pub async fn upsert(pool: &PgPool, input: CreateJob) -> Result<(Job, bool), AppError> {
         let job = sqlx::query_as::<_, Job>(
-            "INSERT INTO jobs (company_id, title, url, location, remote_type, salary_min, salary_max, salary_currency, description, requirements, source, source_id, expires_at, raw_data) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT (source, source_id) DO NOTHING RETURNING *",
+            "INSERT INTO jobs (company_id, title, url, location, remote_type, salary_min, salary_max, salary_currency, description, requirements, source, source_id, expires_at, raw_data)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             ON CONFLICT (source, source_id) DO UPDATE SET
+               title = EXCLUDED.title,
+               url = EXCLUDED.url,
+               location = EXCLUDED.location,
+               remote_type = EXCLUDED.remote_type,
+               salary_min = EXCLUDED.salary_min,
+               salary_max = EXCLUDED.salary_max,
+               salary_currency = EXCLUDED.salary_currency,
+               description = EXCLUDED.description,
+               requirements = EXCLUDED.requirements,
+               raw_data = EXCLUDED.raw_data,
+               updated_at = NOW()
+             RETURNING *",
         )
         .bind(input.company_id)
         .bind(&input.title)
@@ -133,9 +147,13 @@ impl Job {
         .bind(&input.source_id)
         .bind(input.expires_at)
         .bind(&input.raw_data)
-        .fetch_optional(pool)
+        .fetch_one(pool)
         .await?;
-        Ok(job)
+
+        // New inserts have created_at == updated_at (both set to NOW() in same tx).
+        // Updates have updated_at > created_at because only updated_at is refreshed.
+        let was_inserted = (job.updated_at - job.created_at).num_seconds() < 1;
+        Ok((job, was_inserted))
     }
 
     pub async fn update(pool: &PgPool, id: i32, input: UpdateJob) -> Result<Job, AppError> {
@@ -173,6 +191,17 @@ impl Job {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
             .fetch_one(pool)
             .await?;
+        Ok(row.0)
+    }
+
+    pub async fn count_filtered(pool: &PgPool, filters: &JobFilters) -> Result<i64, AppError> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM jobs WHERE ($1::text IS NULL OR source = $1) AND ($2::text IS NULL OR title ILIKE '%' || $2 || '%')",
+        )
+        .bind(&filters.source)
+        .bind(&filters.search)
+        .fetch_one(pool)
+        .await?;
         Ok(row.0)
     }
 

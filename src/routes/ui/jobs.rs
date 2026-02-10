@@ -5,7 +5,7 @@ use axum::response::{Html, Redirect};
 use serde::Deserialize;
 use sqlx::PgPool;
 
-use crate::error::AppError;
+use crate::error::{AppError, HtmlError};
 use crate::models::application::Application;
 use crate::models::company::Company;
 use crate::models::event::Event;
@@ -17,6 +17,8 @@ struct JobListTemplate {
     jobs: Vec<Job>,
     search: String,
     source: String,
+    page: i64,
+    total_pages: i64,
 }
 
 #[derive(Template)]
@@ -32,23 +34,30 @@ struct JobDetailTemplate {
 pub struct JobListQuery {
     pub search: Option<String>,
     pub source: Option<String>,
+    pub page: Option<i64>,
 }
 
 pub async fn list(
     State(pool): State<PgPool>,
     Query(query): Query<JobListQuery>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Html<String>, HtmlError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page: i64 = 50;
     let filters = JobFilters {
         source: query.source.clone().filter(|s| !s.is_empty()),
         search: query.search.clone().filter(|s| !s.is_empty()),
-        page: Some(1),
-        per_page: Some(50),
+        page: Some(page),
+        per_page: Some(per_page),
     };
+    let total = Job::count_filtered(&pool, &filters).await?;
+    let total_pages = (total + per_page - 1) / per_page;
     let jobs = Job::list(&pool, &filters).await?;
     let tmpl = JobListTemplate {
         jobs,
         search: query.search.unwrap_or_default(),
         source: query.source.unwrap_or_default(),
+        page,
+        total_pages,
     };
     Ok(Html(
         tmpl.render()
@@ -59,7 +68,7 @@ pub async fn list(
 pub async fn detail(
     State(pool): State<PgPool>,
     Path(id): Path<i32>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Html<String>, HtmlError> {
     let job = Job::get(&pool, id).await?;
     let company = Company::get(&pool, job.company_id).await?;
 
@@ -105,7 +114,7 @@ pub struct CreateJobForm {
 pub async fn create(
     State(pool): State<PgPool>,
     Form(input): Form<CreateJobForm>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, HtmlError> {
     // Find or create company
     let company = match sqlx::query_as::<_, Company>("SELECT * FROM companies WHERE name = $1")
         .bind(&input.company_name)

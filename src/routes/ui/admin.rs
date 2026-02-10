@@ -6,7 +6,7 @@ use serde::Deserialize;
 use sqlx::PgPool;
 
 use crate::auth::{generate_token, hash_token};
-use crate::error::AppError;
+use crate::error::{AppError, HtmlError};
 use crate::models::collector::Collector;
 use crate::models::collector_run::CollectorRun;
 use crate::routes::api::tokens::TokenInfo;
@@ -19,7 +19,7 @@ struct AdminTemplate {
     recent_runs: Vec<CollectorRun>,
 }
 
-pub async fn index(State(pool): State<PgPool>) -> Result<Html<String>, AppError> {
+pub async fn index(State(pool): State<PgPool>) -> Result<Html<String>, HtmlError> {
     let tokens = sqlx::query_as::<_, TokenInfo>(
         "SELECT id, name, expires_at, created_at, last_used FROM api_tokens ORDER BY created_at DESC",
     )
@@ -48,7 +48,7 @@ pub struct CreateTokenForm {
 pub async fn create_token(
     State(pool): State<PgPool>,
     Form(input): Form<CreateTokenForm>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Html<String>, HtmlError> {
     let raw_token = generate_token();
     let token_hash = hash_token(&raw_token);
 
@@ -71,7 +71,7 @@ pub async fn create_token(
 pub async fn revoke_token(
     State(pool): State<PgPool>,
     Path(id): Path<i32>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, HtmlError> {
     sqlx::query("DELETE FROM api_tokens WHERE id = $1")
         .bind(id)
         .execute(&pool)
@@ -82,7 +82,7 @@ pub async fn revoke_token(
 pub async fn toggle_collector(
     State(pool): State<PgPool>,
     Path(name): Path<String>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, HtmlError> {
     sqlx::query("UPDATE collectors SET enabled = NOT enabled, updated_at = NOW() WHERE name = $1")
         .bind(&name)
         .execute(&pool)
@@ -93,13 +93,12 @@ pub async fn toggle_collector(
 pub async fn trigger_run(
     State(pool): State<PgPool>,
     Path(name): Path<String>,
-) -> Result<Redirect, AppError> {
+) -> Result<Redirect, HtmlError> {
     let collector = Collector::get_by_name(&pool, &name).await?;
     if !collector.enabled {
-        return Err(AppError::BadRequest(format!(
-            "Collector '{}' is disabled",
-            collector.name
-        )));
+        return Err(
+            AppError::BadRequest(format!("Collector '{}' is disabled", collector.name)).into(),
+        );
     }
     CollectorRun::enqueue(&pool, &name, "manual").await?;
     Ok(Redirect::to("/admin"))

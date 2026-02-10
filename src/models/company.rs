@@ -64,6 +64,18 @@ impl Company {
         Ok(company)
     }
 
+    /// Find an existing company by name or create a new one.
+    /// Uses INSERT ON CONFLICT to handle races safely.
+    pub async fn find_or_create(pool: &PgPool, name: &str) -> Result<Company, AppError> {
+        let company = sqlx::query_as::<_, Company>(
+            "INSERT INTO companies (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING *",
+        )
+        .bind(name)
+        .fetch_one(pool)
+        .await?;
+        Ok(company)
+    }
+
     pub async fn update(pool: &PgPool, id: i32, input: UpdateCompany) -> Result<Company, AppError> {
         let existing = Self::get(pool, id).await?;
         let company = sqlx::query_as::<_, Company>(

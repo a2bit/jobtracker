@@ -26,6 +26,8 @@ serde_json = "1"
 
 # HTTP client (for collectors)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+base64 = "0.22"
+percent-encoding = "2.3"
 
 # Auth
 sha2 = "0.10"

@@ -4,6 +4,7 @@ use sqlx::PgPool;
 
 use crate::error::AppError;
 use crate::models::collector::{Collector, UpdateCollector};
+use crate::models::collector_run::CollectorRun;
 
 pub async fn list(State(pool): State<PgPool>) -> Result<Json<Vec<Collector>>, AppError> {
     let collectors = Collector::list(&pool).await?;
@@ -31,12 +32,11 @@ pub async fn trigger_run(
         )));
     }
 
-    // For now, just record that it was triggered. Actual collection logic
-    // will be implemented in Phase 3 (collectors module).
-    Collector::record_run(&pool, &name, None).await?;
+    let run = CollectorRun::enqueue(&pool, &name, "manual").await?;
 
     Ok(Json(serde_json::json!({
-        "status": "triggered",
+        "status": "queued",
+        "run_id": run.id,
         "collector": name,
     })))
 }

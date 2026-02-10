@@ -36,28 +36,33 @@ just docker-build
 
 ```
 src/
-  main.rs             # Entry point, config, server startup
-  config.rs           # CLI args + env vars (clap)
+  main.rs             # Entry point, subcommand dispatch (serve/collect)
+  config.rs           # CLI args + env vars + subcommands (clap derive)
   db.rs               # Pool creation, migrations
   auth.rs             # Token hashing, generation, middleware
   error.rs            # AppError enum with IntoResponse
   models/             # Database models with sqlx::FromRow
-    company.rs        # CRUD for companies
-    job.rs            # CRUD for jobs (with search/filter)
+    company.rs        # CRUD + find_or_create for companies
+    job.rs            # CRUD + upsert (dedup on source+source_id)
     application.rs    # CRUD for applications (with status tracking)
     event.rs          # Timeline events
     collector.rs      # Collector config management
+    collector_run.rs  # Queue table: enqueue, claim (SKIP LOCKED), status updates
   routes/
     api/              # JSON REST API (/api/v1/*)
       jobs.rs         # GET/POST/PUT/DELETE
       companies.rs    # GET/POST/PUT
       applications.rs # GET/POST/PUT/DELETE
       events.rs       # GET/POST
-      collectors.rs   # GET/PUT + POST trigger
+      collectors.rs   # GET/PUT + POST trigger (enqueues run)
       tokens.rs       # GET/POST/DELETE
     ui/               # HTML pages (Phase 2)
+      admin.rs        # Token mgmt, collector toggle, run trigger, run history
   collectors/         # Job source collectors (Phase 3)
-migrations/           # SQL migration files
+    mod.rs            # CollectedJob struct, JobCollector trait, registry
+    runner.rs         # Worker poll loop (claim_next + process)
+    hiringcafe.rs     # HiringCafe collector (reqwest + Python CLI fallback)
+migrations/           # SQL migration files (001-003)
 deploy/               # Kubernetes manifests
 ```
 
@@ -107,6 +112,7 @@ PostgreSQL via CloudNativePG on homelab K3s. Tables:
 - `applications` - status pipeline: draft, applied, interviewing, rejected, offer, accepted, withdrawn
 - `events` - timeline entries linked to applications/jobs
 - `collectors` - job source configuration (linkedin, indeed, hiringcafe, xing)
+- `collector_runs` - job queue + audit log (pending/running/succeeded/failed, SKIP LOCKED)
 - `api_tokens` - SHA-256 hashed bearer tokens with expiry
 
 ## Deployment
@@ -125,7 +131,7 @@ Manifests in `deploy/` follow the n8n-cnpg pattern:
 
 - **Phase 1** (done): Cargo scaffold, migrations, REST API, auth middleware
 - **Phase 2** (done): Askama templates, htmx dashboard, Tailwind dark mode UI
-- **Phase 3**: Job collectors (LinkedIn, Indeed, HiringCafe, Xing)
+- **Phase 3** (done): HiringCafe collector, DB queue (SKIP LOCKED), worker subcommand, admin run history
 - **Phase 4**: CI/CD pipeline, ArgoCD deployment, 1Password setup
 - **Phase 5**: Integration with linkedin-job-applier agent, CV pipeline, metrics
 
@@ -134,9 +140,32 @@ Manifests in `deploy/` follow the n8n-cnpg pattern:
 | Env Var | Description | Default |
 |---------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | (required) |
-| `LISTEN_ADDR` | Bind address | `0.0.0.0:8080` |
+| `LISTEN_ADDR` | Bind address (serve mode) | `0.0.0.0:8080` |
 | `RUN_MIGRATIONS` | Auto-run migrations on start | `true` |
+| `POLL_INTERVAL` | Worker poll interval seconds (collect mode) | `10` |
 | `RUST_LOG` | Log filter | `jobtracker=info,tower_http=info` |
+
+## Subcommands
+
+```bash
+# Web server (default, backward compatible with bare `jobtracker`)
+jobtracker serve --listen-addr 0.0.0.0:8080
+
+# Worker loop for a specific collector
+jobtracker collect --collector hiringcafe --poll-interval 10
+```
+
+## Collector Architecture
+
+Workers and the web server communicate via PostgreSQL (no inter-pod HTTP).
+
+1. User clicks "Run Now" or calls `POST /api/v1/collectors/hiringcafe/run`
+2. Web server inserts row into `collector_runs` (status: pending)
+3. Worker polls with `SELECT FOR UPDATE SKIP LOCKED`, claims the run
+4. Worker executes the collector, upserts jobs (dedup on source+source_id)
+5. Worker marks run as succeeded/failed, updates `collectors.last_run_at`
+
+K8s: 1 Deployment for `jobtracker serve`, 1 Deployment per collector worker.
 
 ## Conventions
 

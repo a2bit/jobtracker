@@ -37,6 +37,10 @@ pub fn router(pool: PgPool) -> Router {
             "/admin/collectors/{name}/toggle",
             post(admin::toggle_collector),
         )
+        .route(
+            "/admin/collectors/{name}/run",
+            post(admin::trigger_run),
+        )
         .with_state(pool)
         .nest_service("/static", ServeDir::new("static"))
 }

@@ -113,6 +113,31 @@ impl Job {
         Ok(job)
     }
 
+    /// Insert a job, skipping if a row with the same (source, source_id) already exists.
+    /// Returns Some(job) if inserted, None if it was a duplicate.
+    pub async fn upsert(pool: &PgPool, input: CreateJob) -> Result<Option<Job>, AppError> {
+        let job = sqlx::query_as::<_, Job>(
+            "INSERT INTO jobs (company_id, title, url, location, remote_type, salary_min, salary_max, salary_currency, description, requirements, source, source_id, expires_at, raw_data) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT (source, source_id) DO NOTHING RETURNING *",
+        )
+        .bind(input.company_id)
+        .bind(&input.title)
+        .bind(&input.url)
+        .bind(&input.location)
+        .bind(&input.remote_type)
+        .bind(input.salary_min)
+        .bind(input.salary_max)
+        .bind(&input.salary_currency)
+        .bind(&input.description)
+        .bind(&input.requirements)
+        .bind(&input.source)
+        .bind(&input.source_id)
+        .bind(input.expires_at)
+        .bind(&input.raw_data)
+        .fetch_optional(pool)
+        .await?;
+        Ok(job)
+    }
+
     pub async fn update(pool: &PgPool, id: i32, input: UpdateJob) -> Result<Job, AppError> {
         let existing = Self::get(pool, id).await?;
         let job = sqlx::query_as::<_, Job>(

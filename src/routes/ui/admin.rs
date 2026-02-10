@@ -8,6 +8,7 @@ use sqlx::PgPool;
 use crate::auth::{generate_token, hash_token};
 use crate::error::AppError;
 use crate::models::collector::Collector;
+use crate::models::collector_run::CollectorRun;
 use crate::routes::api::tokens::TokenInfo;
 
 #[derive(Template)]
@@ -15,6 +16,7 @@ use crate::routes::api::tokens::TokenInfo;
 struct AdminTemplate {
     tokens: Vec<TokenInfo>,
     collectors: Vec<Collector>,
+    recent_runs: Vec<CollectorRun>,
 }
 
 pub async fn index(State(pool): State<PgPool>) -> Result<Html<String>, AppError> {
@@ -25,8 +27,13 @@ pub async fn index(State(pool): State<PgPool>) -> Result<Html<String>, AppError>
     .await?;
 
     let collectors = Collector::list(&pool).await?;
+    let recent_runs = CollectorRun::recent(&pool, None, 20).await?;
 
-    let tmpl = AdminTemplate { tokens, collectors };
+    let tmpl = AdminTemplate {
+        tokens,
+        collectors,
+        recent_runs,
+    };
     Ok(Html(
         tmpl.render()
             .map_err(|e| AppError::Internal(e.to_string()))?,
@@ -80,5 +87,20 @@ pub async fn toggle_collector(
         .bind(&name)
         .execute(&pool)
         .await?;
+    Ok(Redirect::to("/admin"))
+}
+
+pub async fn trigger_run(
+    State(pool): State<PgPool>,
+    Path(name): Path<String>,
+) -> Result<Redirect, AppError> {
+    let collector = Collector::get_by_name(&pool, &name).await?;
+    if !collector.enabled {
+        return Err(AppError::BadRequest(format!(
+            "Collector '{}' is disabled",
+            collector.name
+        )));
+    }
+    CollectorRun::enqueue(&pool, &name, "manual").await?;
     Ok(Redirect::to("/admin"))
 }

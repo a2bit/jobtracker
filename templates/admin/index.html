@@ -72,6 +72,12 @@
                         {% if let Some(lr) = &collector.last_run_at %}
                         <span class="text-text-dim text-xs">Last run: {{ lr.format("%b %d %H:%M") }}</span>
                         {% endif %}
+                        {% if collector.enabled %}
+                        <button hx-post="/admin/collectors/{{ collector.name }}/run" hx-target="body" hx-push-url="true"
+                                class="px-3 py-1 rounded text-xs bg-accent/20 text-accent hover:bg-accent/30 transition-colors">
+                            Run Now
+                        </button>
+                        {% endif %}
                         <button hx-post="/admin/collectors/{{ collector.name }}/toggle" hx-target="body" hx-push-url="true"
                                 class="px-3 py-1 rounded text-xs bg-surface-hover hover:bg-surface-card transition-colors">
                             {% if collector.enabled %}Disable{% else %}Enable{% endif %}
@@ -84,6 +90,60 @@
             </div>
             {% endfor %}
         </div>
+    </div>
+
+    {# Recent Collector Runs #}
+    <div class="bg-surface-card rounded-lg p-5">
+        <h2 class="text-lg font-semibold mb-4">Recent Collector Runs</h2>
+        {% if recent_runs.is_empty() %}
+        <p class="text-text-muted text-sm">No collector runs yet. Enable a collector and click "Run Now" to start.</p>
+        {% else %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-text-dim border-b border-surface-hover">
+                        <th class="pb-2">Status</th>
+                        <th class="pb-2">Collector</th>
+                        <th class="pb-2">Kind</th>
+                        <th class="pb-2">Found</th>
+                        <th class="pb-2">New</th>
+                        <th class="pb-2">Duration</th>
+                        <th class="pb-2">Requested</th>
+                        <th class="pb-2">Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in &recent_runs %}
+                    <tr class="border-b border-surface-hover/50">
+                        <td class="py-2">
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full {% if run.status == "succeeded" %}bg-status-accepted{% elif run.status == "failed" %}bg-status-rejected{% elif run.status == "running" %}bg-status-interviewing{% else %}bg-status-draft{% endif %}"></span>
+                                <span class="text-xs">{{ run.status }}</span>
+                            </span>
+                        </td>
+                        <td class="py-2 capitalize">{{ run.collector_name }}</td>
+                        <td class="py-2 text-text-muted text-xs">{{ run.run_kind }}</td>
+                        <td class="py-2 text-text-muted">{{ run.jobs_found.unwrap_or(0) }}</td>
+                        <td class="py-2 text-text-muted">{{ run.jobs_new.unwrap_or(0) }}</td>
+                        <td class="py-2 text-text-muted text-xs">
+                            {% if let (Some(start), Some(end)) = (&run.started_at, &run.finished_at) %}
+                                {{ (*end - *start).num_seconds() }}s
+                            {% elif run.status == "running" %}
+                                ...
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="py-2 text-text-muted text-xs">{{ run.requested_at.format("%b %d %H:%M") }}</td>
+                        <td class="py-2 text-status-rejected text-xs max-w-xs truncate">
+                            {% if let Some(err) = &run.error %}{{ err }}{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
     </div>
 </div>
 

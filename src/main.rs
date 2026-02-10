@@ -16,7 +16,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::Config;
+use crate::config::{Command, Config};
 
 async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
@@ -50,18 +50,28 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Migrations complete");
     }
 
-    let readyz_pool = pool.clone();
-    let app = Router::new()
-        .route("/healthz", get(healthz))
-        .route("/readyz", get(move || readyz(readyz_pool.clone())))
-        .merge(routes::ui::router(pool.clone()))
-        .merge(routes::api::router(pool))
-        .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive());
+    match config.resolved_command() {
+        Command::Serve { listen_addr } => {
+            let readyz_pool = pool.clone();
+            let app = Router::new()
+                .route("/healthz", get(healthz))
+                .route("/readyz", get(move || readyz(readyz_pool.clone())))
+                .merge(routes::ui::router(pool.clone()))
+                .merge(routes::api::router(pool))
+                .layer(TraceLayer::new_for_http())
+                .layer(CorsLayer::permissive());
 
-    let listener = tokio::net::TcpListener::bind(&config.listen_addr).await?;
-    tracing::info!("Listening on {}", config.listen_addr);
-    axum::serve(listener, app).await?;
+            let listener = tokio::net::TcpListener::bind(&listen_addr).await?;
+            tracing::info!("Listening on {listen_addr}");
+            axum::serve(listener, app).await?;
+        }
+        Command::Collect {
+            collector,
+            poll_interval,
+        } => {
+            collectors::runner::run(pool, &collector, poll_interval).await?;
+        }
+    }
 
     Ok(())
 }

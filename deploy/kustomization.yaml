@@ -21,6 +21,6 @@ labels:
 # CI pushes: registry-push.tail74b58.ts.net/jobtracker-collector:<short-sha>
 images:
   - name: registry-push.tail74b58.ts.net/jobtracker
-    newTag: 96ba4da
+    newTag: f9b684a
   - name: registry-push.tail74b58.ts.net/jobtracker-collector
     newTag: latest

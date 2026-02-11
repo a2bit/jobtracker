@@ -12,10 +12,6 @@ jobs:
     runs-on: homelab-runners
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq build-essential pkg-config libssl-dev
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -42,10 +38,6 @@ jobs:
       GIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Docker dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq iptables
-      - name: Set up Docker
-        uses: docker/setup-docker-action@v4
       - name: Build Rust app image
         run: |
           SHORT_SHA="${GIT_SHA:0:7}"

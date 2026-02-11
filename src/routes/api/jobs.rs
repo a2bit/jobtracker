@@ -35,6 +35,17 @@ pub async fn update(
     Ok(Json(job))
 }
 
+pub async fn upsert(
+    State(pool): State<PgPool>,
+    Json(input): Json<CreateJob>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let (job, was_inserted) = Job::upsert(&pool, input).await?;
+    Ok(Json(serde_json::json!({
+        "job": job,
+        "was_inserted": was_inserted,
+    })))
+}
+
 pub async fn delete(
     State(pool): State<PgPool>,
     Path(id): Path<i32>,

@@ -1,4 +1,5 @@
 pub mod applications;
+pub mod collect;
 pub mod collectors;
 pub mod companies;
 pub mod events;
@@ -43,6 +44,12 @@ pub fn router(pool: PgPool) -> Router {
         .route("/collectors", get(collectors::list))
         .route("/collectors/{name}", put(collectors::update))
         .route("/collectors/{name}/run", post(collectors::trigger_run))
+        // Collector ingest (batch API for external collectors)
+        .route("/collect/ingest", post(collect::ingest))
+        // Job upsert (single job for CLI tools)
+        .route("/jobs/upsert", post(jobs::upsert))
+        // Company find-or-create (resolve name to ID)
+        .route("/companies/find-or-create", post(companies::find_or_create))
         // Tokens
         .route("/tokens", get(tokens::list).post(tokens::create))
         .route("/tokens/{id}", delete(tokens::revoke))

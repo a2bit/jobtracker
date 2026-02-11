@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jobtracker-collector-hiringcafe
+  namespace: jobtracker
+  labels:
+    app.kubernetes.io/component: collector-hiringcafe
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/component: collector-hiringcafe
+        spec:
+          containers:
+            - name: collector
+              image: registry-push.tail74b58.ts.net/jobtracker-collector:latest
+              env:
+                - name: JOBTRACKER_URL
+                  value: "http://jobtracker.jobtracker.svc:80"
+                - name: JOBTRACKER_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: jobtracker-collector-token
+                      key: token
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+          restartPolicy: OnFailure

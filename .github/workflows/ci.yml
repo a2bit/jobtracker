@@ -6,10 +6,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: registry-push.tail74b58.ts.net
-  IMAGE_NAME: jobtracker
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: homelab-runners
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
@@ -23,8 +22,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-cargo-
       - name: Format check
         run: cargo fmt -- --check
       - name: Clippy
@@ -34,47 +33,25 @@ jobs:
   build-and-push:
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: homelab-runners
+    env:
+      GIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build image
-        env:
-          GIT_SHA: ${{ github.sha }}
-        run: |
-          docker build -t "$IMAGE_NAME:$GIT_SHA" .
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
-          args: --accept-dns=true
-      - name: Resolve registry via MagicDNS
-        run: |
-          # systemd-resolved doesn't forward .ts.net to Tailscale.
-          # Query MagicDNS (100.100.100.100) directly and inject into /etc/hosts.
-          REGISTRY_IP=""
-          for i in $(seq 1 15); do
-            REGISTRY_IP=$(dig +short "$REGISTRY" @100.100.100.100 2>/dev/null | head -1)
-            if [ -n "$REGISTRY_IP" ]; then
-              echo "Resolved $REGISTRY -> $REGISTRY_IP on attempt $i"
-              break
-            fi
-            echo "Waiting for MagicDNS... attempt $i"
-            sleep 2
-          done
-          if [ -z "$REGISTRY_IP" ]; then
-            echo "::error::Failed to resolve $REGISTRY via MagicDNS"
-            tailscale status
-            exit 1
-          fi
-          echo "$REGISTRY_IP $REGISTRY" | sudo tee -a /etc/hosts
-          echo "Added /etc/hosts entry: $REGISTRY_IP $REGISTRY"
-      - name: Tag and push to internal registry
-        env:
-          GIT_SHA: ${{ github.sha }}
+      - name: Set up Docker
+        uses: docker/setup-docker-action@v4
+      - name: Build Rust app image
         run: |
           SHORT_SHA="${GIT_SHA:0:7}"
-          docker tag "$IMAGE_NAME:$GIT_SHA" "$REGISTRY/$IMAGE_NAME:$SHORT_SHA"
-          docker push "$REGISTRY/$IMAGE_NAME:$SHORT_SHA"
-          echo "Pushed $REGISTRY/$IMAGE_NAME:$SHORT_SHA"
+          docker build -t "$REGISTRY/jobtracker:$SHORT_SHA" .
+          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
+      - name: Build Python collector image
+        run: |
+          docker build -t "$REGISTRY/jobtracker-collector:$SHORT_SHA" \
+            -f collectors/Dockerfile collectors/
+      - name: Push images to internal registry
+        run: |
+          docker push "$REGISTRY/jobtracker:$SHORT_SHA"
+          docker push "$REGISTRY/jobtracker-collector:$SHORT_SHA"
+          echo "Pushed jobtracker:$SHORT_SHA"
+          echo "Pushed jobtracker-collector:$SHORT_SHA"

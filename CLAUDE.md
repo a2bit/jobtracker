@@ -63,7 +63,12 @@ src/
     runner.rs         # Worker poll loop (claim_next + process)
     hiringcafe.rs     # HiringCafe collector (reqwest + Python CLI fallback)
 migrations/           # SQL migration files (001-003)
-deploy/               # Kubernetes manifests
+collectors/
+  hiringcafe.py       # Python collector (curl_cffi + impersonate)
+  Dockerfile          # Python collector image
+deploy/
+  cronjob-collector-hiringcafe.yaml  # K8s CronJob (every 6h)
+  ...                 # Kubernetes manifests
 ```
 
 ## API Endpoints
@@ -98,6 +103,10 @@ POST   /api/v1/collectors/:name/run
 GET    /api/v1/tokens
 POST   /api/v1/tokens
 DELETE /api/v1/tokens/:id
+
+POST   /api/v1/collect/ingest          # Batch ingest (for Python collectors)
+POST   /api/v1/jobs/upsert             # Single job upsert (dedup on source+source_id)
+POST   /api/v1/companies/find-or-create # Resolve company name to ID
 
 GET    /healthz      # Liveness
 GET    /readyz       # Readiness (DB check)
@@ -144,10 +153,16 @@ kubectl --context homelab exec jobtracker-pg-1 -n jobtracker -c postgres \
 ## Deployment
 
 ```
-GitHub push -> CI (cargo test, docker build) -> registry-push.tail74b58.ts.net
+GitHub push -> CI on self-hosted ARC runners (homelab K3s, DinD mode)
+  -> cargo test, docker build (2 images: jobtracker + jobtracker-collector)
+  -> registry-push.tail74b58.ts.net
   -> ArgoCD Image Updater polls registry (2min) -> git write-back newTag
   -> ArgoCD auto-sync -> K3s
 ```
+
+CI runs on `homelab-runners` label (ARC runner set, a2bit org). Triggered on
+push to main and workflow_dispatch only — no `pull_request` trigger (security:
+public repo with self-hosted runners).
 
 ### Deploy Manifests (`deploy/`)
 
@@ -197,6 +212,8 @@ short SHA (e.g., `a85837d`).
 - **Phase 5** (done): Upsert-on-conflict updates, collector pagination (5 pages),
   HTTP timeouts, graceful shutdown, stale run recovery, UI pagination,
   HTML error pages, missing DB indexes
+- **Phase 6** (done): Batch ingest API, Python collector (curl_cffi + browser
+  impersonation), K8s CronJob (every 6h), CI builds two images
 
 ## Configuration
 
